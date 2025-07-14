@@ -2,6 +2,7 @@ obj-m := \
 	proxyfs.o
 
 proxyfs-objs := \
+	proxyfs-dir-inode-ops.o \
 	proxyfs-file-ops.o \
 	proxyfs-main.o \
 	proxyfs_buffer_pool.o \

@@ -1,3 +1,6 @@
+// File		:proxyfs-file-ops.c
+// Author	:Victor Kovalevich
+// Created	:Tue Jul 15 00:39:51 2025
 #include "proxyfs.h"
 
 #include <linux/fs.h>
@@ -433,7 +436,6 @@ static int proxyfs_uring_cmd_iopoll(struct io_uring_cmd *ioucmd,
 
 // file_operations
 const struct file_operations proxyfs_file_ops = {
-
 	// struct module *owner;
     .owner = NULL,
 	// fop_flags_t fop_flags;

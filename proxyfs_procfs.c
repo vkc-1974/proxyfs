@@ -4,7 +4,7 @@
 #include "proxyfs.h"
 
 static int proxyfs_procfs_unitid_show(struct seq_file* m, void* v) {
-    seq_printf(m, "%d\n", NETLINK_USER);
+    seq_printf(m, "%d\n", PROXYFS_NETLINK_USER);
     return 0;
 }
 
@@ -54,36 +54,36 @@ static const struct proc_ops proxyfs_procfs_pids_ops = {
 struct proc_dir_entry* proxyfs_procfs_setup(void) {
     struct proc_dir_entry* lsm_proc_dir;
 
-    if ((lsm_proc_dir = proc_mkdir(PROCFS_PROXYFS_DIR, NULL)) == NULL) {
+    if ((lsm_proc_dir = proc_mkdir(PROXYFS_PROCFS_DIR, NULL)) == NULL) {
         pr_err("%s: unable to create /proc/%s\n",
                MODULE_NAME,
-               PROCFS_PROXYFS_DIR);
+               PROXYFS_PROCFS_DIR);
         return NULL;
     }
 
     pr_info("%s: created /proc/%s\n",
             MODULE_NAME,
-            PROCFS_PROXYFS_DIR);
+            PROXYFS_PROCFS_DIR);
 
-    proc_create(PROCFS_PROXYFS_UNIT_ID, 0444, lsm_proc_dir, &proxyfs_procfs_unitid_ops);
+    proc_create(PROXYFS_PROCFS_UNIT_ID, 0444, lsm_proc_dir, &proxyfs_procfs_unitid_ops);
     pr_info("%s: created /proc/%s/%s\n",
             MODULE_NAME,
-            PROCFS_PROXYFS_DIR,
-            PROCFS_PROXYFS_UNIT_ID);
-    proc_create(PROCFS_PROXYFS_FILTERS, 0444, lsm_proc_dir, &proxyfs_procfs_filters_ops);
+            PROXYFS_PROCFS_DIR,
+            PROXYFS_PROCFS_UNIT_ID);
+    proc_create(PROXYFS_PROCFS_FILTERS, 0444, lsm_proc_dir, &proxyfs_procfs_filters_ops);
     pr_info("%s: created /proc/%s/%s\n",
             MODULE_NAME,
-            PROCFS_PROXYFS_DIR,
-            PROCFS_PROXYFS_FILTERS);
-    proc_create(PROCFS_PROXYFS_PIDS, 0444, lsm_proc_dir, &proxyfs_procfs_pids_ops);
+            PROXYFS_PROCFS_DIR,
+            PROXYFS_PROCFS_FILTERS);
+    proc_create(PROXYFS_PROCFS_PIDS, 0444, lsm_proc_dir, &proxyfs_procfs_pids_ops);
     pr_info("%s: created /proc/%s/%s\n",
             MODULE_NAME,
-            PROCFS_PROXYFS_DIR,
-            PROCFS_PROXYFS_PIDS);
+            PROXYFS_PROCFS_DIR,
+            PROXYFS_PROCFS_PIDS);
 
     return lsm_proc_dir;
 }
 
 void proxyfs_procfs_release(void) {
-    remove_proc_subtree(PROCFS_PROXYFS_DIR, NULL);
+    remove_proc_subtree(PROXYFS_PROCFS_DIR, NULL);
 }

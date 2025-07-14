@@ -1,7 +1,7 @@
 // File		:proxyfs_buffer_pool.c
 // Author	:Victor Kovalevich
 // Created	:Fri Jul 11 01:27:18 2025
-#include "lsm_netlink.h"
+#include "proxyfs.h"
 
 bool proxyfs_context_buffer_pool_init(struct proxyfs_buffer_pool *buffer_pool,
                                       unsigned int count,
@@ -41,7 +41,7 @@ bool proxyfs_context_buffer_pool_init(struct proxyfs_buffer_pool *buffer_pool,
     } while (false);
 
     if (init_res == true) {
-        buffer_pool->bufs = bufs;
+        buffer_pool->buffers = bufs;
         buffer_pool->bitmap = bitmap;
         buffer_pool->size = size;
         buffer_pool->count = count;
@@ -68,15 +68,15 @@ bool proxyfs_context_buffer_pool_init(struct proxyfs_buffer_pool *buffer_pool,
 
 void proxyfs_context_buffer_pool_destroy(struct proxyfs_buffer_pool *buffer_pool) {
     unsigned int i;
-    if (!buffer_pool || !buffer_pool->bufs || !buffer_pool->bitmap) {
+    if (!buffer_pool || !buffer_pool->buffers || !buffer_pool->bitmap) {
         return;
     }
     for (i = 0; i < buffer_pool->count; i++) {
-        kfree(buffer_pool->bufs[i]);
+        kfree(buffer_pool->buffers[i]);
     }
     kfree(buffer_pool->bitmap);
-    kfree(buffer_pool->bufs);
-    buffer_pool->bufs = NULL;
+    kfree(buffer_pool->buffers);
+    buffer_pool->buffers = NULL;
     buffer_pool->bitmap = NULL;
     buffer_pool->count = 0;
     buffer_pool->size = 0;
@@ -94,7 +94,7 @@ void* proxyfs_context_buffer_pool_alloc(struct proxyfs_context_data *context_dat
     if ((i = find_first_zero_bit(context_data->buffer_pool.bitmap,
                                  context_data->buffer_pool.count)) < context_data->buffer_pool.count) {
         set_bit(i, context_data->buffer_pool.bitmap);
-        buffer = context_data->buffer_pool.bufs[i];
+        buffer = context_data->buffer_pool.buffers[i];
         atomic_inc(&context_data->buffer_pool.in_use);
     }
     spin_unlock_irqrestore(&context_data->buffer_pool.lock, flags);
@@ -113,7 +113,7 @@ bool proxyfs_context_buffer_pool_free(struct proxyfs_context_data *context_data,
 
     spin_lock_irqsave(&context_data->buffer_pool.lock, flags);
     for (i = 0; i < context_data->buffer_pool.count; i++) {
-        if (context_data->buffer_pool.bufs[i] == buffer) {
+        if (context_data->buffer_pool.buffers[i] == buffer) {
             if (test_and_clear_bit(i, context_data->buffer_pool.bitmap)) {
                 atomic_dec(&context_data->buffer_pool.in_use);
                 found = true;

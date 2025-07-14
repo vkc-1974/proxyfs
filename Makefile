@@ -1,7 +1,7 @@
 obj-m := \
 	proxyfs.o
 
-prixyfs-objs := \
+proxyfs-objs := \
 	proxyfs-main.o \
 	proxyfs_buffer_pool.o \
 	proxyfs_socket.o \

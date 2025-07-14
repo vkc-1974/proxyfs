@@ -35,8 +35,10 @@
 #define PROXYFS_PROCFS_FILTERS "filters"
 #define PROXYFS_PROCFS_PIDS    "pids"
 
+#define PROXYFS_NETLINK_USER    25
+
 struct proxyfs_buffer_pool {
-    void **bufferss;
+    void **buffers;
     unsigned long *bitmap;
     unsigned int size;
     unsigned int count;

@@ -37,6 +37,16 @@
 
 #define PROXYFS_NETLINK_USER    25
 
+#define PROXYFS_DEBUG(fmt, ...) \
+  pr_info("%s: %s: " fmt, MODULE_NAME, __func__, ##__VA_ARGS__)
+
+static inline const char *proxyfs_dentry_name(const struct dentry *dentry) {
+    return dentry ? (const char*)dentry->d_name.name : "?";
+}
+
+#define PROXYFS_INODE_DEBUG(dentry, fmt, ...) \
+  pr_info("%s: %s: name=%s " fmt, MODULE_NAME, __func__, proxyfs_dentry_name(dentry), ##__VA_ARGS__)
+
 struct proxyfs_buffer_pool {
     void **buffers;
     unsigned long *bitmap;
@@ -65,6 +75,19 @@ struct proxyfs_context_data {
     // state or going to stop running
     atomic_t running_state;
     atomic_t handler_counter;
+};
+
+struct proxyfs_inode_info {
+    struct inode vfs_inode;
+    struct inode *lower_inode;
+};
+
+struct proxyfs_file_info {
+    struct file *lower_file;
+};
+
+struct proxyfs_sb_info {
+    struct super_block *lower_sb;
 };
 
 //
@@ -100,5 +123,7 @@ void proxyfs_socket_send_msg(const char* msg_body,
 // Procfs specific routines
 struct proc_dir_entry* proxyfs_procfs_setup(void);
 void proxyfs_procfs_release(void);
+
+extern const struct file_operations proxyfs_file_ops;
 
 #endif //  !__PROXYFS_H__

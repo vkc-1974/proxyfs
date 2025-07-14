@@ -13,37 +13,9 @@
 #include <linux/cred.h>
 #include <linux/kernel_read_file.h>
 
-static inline const char *proxyfs_dentry_name(const struct dentry *dentry) {
-    return dentry ? (const char*)dentry->d_name.name : "?";
-}
-
-#define PROXYFS_DEBUG(fmt, ...) \
-  pr_info("%s: %s: " fmt, MODULE_NAME, __func__, ##__VA_ARGS__)
-
-#define PROXYFS_INODE_DEBUG(dentry, fmt, ...) \
-  pr_info("%s: %s: name=%s " fmt, MODULE_NAME, __func__, proxyfs_dentry_name(dentry), ##__VA_ARGS__)
-
-struct proxyfs_inode_info {
-    struct inode vfs_inode;
-    struct inode *lower_inode;
-};
-
-struct proxyfs_file_info {
-    struct file *lower_file;
-};
-
-struct proxyfs_sb_info {
-    struct super_block *lower_sb;
-};
-
 // Get lower inode from proxy inode
 static struct inode *proxyfs_lower_inode(const struct inode *inode) {
     return ((struct proxyfs_inode_info *)inode)->lower_inode;
-}
-
-// Get lower file from proxy file
-static struct file *proxyfs_lower_file(const struct file *file) {
-    return ((struct proxyfs_file_info *)file->private_data)->lower_file;
 }
 
 // Get lower super block from proxy file
@@ -51,63 +23,6 @@ static struct super_block *proxyfs_lower_sb(const struct super_block *sb) {
     return ((struct proxyfs_sb_info *)sb->s_fs_info)->lower_sb;
 }
 
-// open hook
-static int proxyfs_open(struct inode *inode, struct file *file) {
-    struct inode *lower_inode = proxyfs_lower_inode(inode);
-    struct file *lower_file;
-
-    PROXYFS_DEBUG("inode=%lu, name=%s\n", inode->i_ino, file->f_path.dentry->d_name.name);
-
-    //
-    // TBD: inform user space running monitor application `open`
-    //      routine has been called
-
-    lower_file = dentry_open(&file->f_path, file->f_flags, current_cred());
-    if (IS_ERR(lower_file)) {
-        return PTR_ERR(lower_file);
-    }
-
-    file->private_data = kmalloc(sizeof(struct proxyfs_file_info), GFP_KERNEL);
-    if (!file->private_data) {
-        fput(lower_file);
-        return -ENOMEM;
-    }
-    ((struct proxyfs_file_info *)file->private_data)->lower_file = lower_file;
-    return 0;
-}
-
-// release (close) hook
-static int proxyfs_release(struct inode *inode, struct file *file) {
-    PROXYFS_DEBUG("inode=%lu, name=%s\n", inode->i_ino, file->f_path.dentry->d_name.name);
-    struct file *lower_file = proxyfs_lower_file(file);
-    if (lower_file) {
-        fput(lower_file);
-    }
-    kfree(file->private_data);
-    return 0;
-}
-
-// read hook
-static ssize_t proxyfs_read(struct file *file, char __user *buf, size_t count, loff_t *ppos) {
-    PROXYFS_DEBUG("name=%s, count=%zu\n", file->f_path.dentry->d_name.name, count);
-    return kernel_read(proxyfs_lower_file(file), buf, count, ppos);
-}
-
-// write hook
-static ssize_t proxyfs_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos) {
-    PROXYFS_DEBUG("name=%s, count=%zu\n", file->f_path.dentry->d_name.name, count);
-    return kernel_write(proxyfs_lower_file(file), buf, count, ppos);
-}
-
-// llseek hook
-static loff_t proxyfs_llseek(struct file *file, loff_t offset, int whence) {
-    PROXYFS_DEBUG("name=%s, offset=%lld, whence=%d\n", file->f_path.dentry->d_name.name, offset, whence);
-    struct file *lower_file = proxyfs_lower_file(file);
-    if (lower_file->f_op && lower_file->f_op->llseek) {
-        return lower_file->f_op->llseek(lower_file, offset, whence);
-    }
-    return -ENOSYS;
-}
 
 // iterate hook
 #if 0
@@ -120,106 +35,6 @@ static int proxyfs_iterate(struct file *file, struct dir_context *ctx) {
     return -ENOSYS;
 }
 #endif //  0
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,5,0)
-// iterate_shared hook
-static int proxyfs_iterate_shared(struct file *file, struct dir_context *ctx) {
-    PROXYFS_DEBUG("name=%s\n", file->f_path.dentry->d_name.name);
-    struct file *lower_file = proxyfs_lower_file(file);
-    if (lower_file->f_op && lower_file->f_op->iterate_shared) {
-        return lower_file->f_op->iterate_shared(lower_file, ctx);
-    }
-    return -ENOSYS;
-}
-#endif
-
-static long proxyfs_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
-    PROXYFS_DEBUG("name=%s, cmd=0x%x\n", file->f_path.dentry->d_name.name, cmd);
-    struct file *lower_file = proxyfs_lower_file(file);
-    if (lower_file->f_op && lower_file->f_op->unlocked_ioctl) {
-        return lower_file->f_op->unlocked_ioctl(lower_file, cmd, arg);
-    }
-    return -ENOTTY;
-}
-
-#ifdef CONFIG_COMPAT
-static long proxyfs_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
-    PROXYFS_DEBUG("name=%s, cmd=0x%x\n", file->f_path.dentry->d_name.name, cmd);
-    struct file *lower_file = proxyfs_lower_file(file);
-    if (lower_file->f_op && lower_file->f_op->compat_ioctl) {
-        return lower_file->f_op->compat_ioctl(lower_file, cmd, arg);
-    }
-    return -ENOTTY;
-}
-#endif
-
-static int proxyfs_mmap(struct file *file, struct vm_area_struct *vma) {
-    PROXYFS_DEBUG("name=%s\n", file->f_path.dentry->d_name.name);
-    struct file *lower_file = proxyfs_lower_file(file);
-    if (lower_file->f_op && lower_file->f_op->mmap) {
-        return lower_file->f_op->mmap(lower_file, vma);
-    }
-    return -ENOSYS;
-}
-
-static int proxyfs_flush(struct file *file, fl_owner_t id) {
-    PROXYFS_DEBUG("name=%s flush\n", file->f_path.dentry->d_name.name);
-    struct file *lower_file = proxyfs_lower_file(file);
-    if (lower_file->f_op && lower_file->f_op->flush) {
-        return lower_file->f_op->flush(lower_file, id);
-    }
-    return 0;
-}
-
-static int proxyfs_fsync(struct file *file, loff_t start, loff_t end, int datasync) {
-    PROXYFS_DEBUG("name=%s fsync start=%lld end=%lld datasync=%d\n", file->f_path.dentry->d_name.name, start, end, datasync);
-    struct file *lower_file = proxyfs_lower_file(file);
-    if (lower_file->f_op && lower_file->f_op->fsync) {
-        return lower_file->f_op->fsync(lower_file, start, end, datasync);
-    }
-    return 0;
-}
-
-static int proxyfs_fasync(int fd, struct file *file, int on) {
-    PROXYFS_DEBUG("name=%s fasync fd=%d on=%d\n", file->f_path.dentry->d_name.name, fd, on);
-    struct file *lower_file = proxyfs_lower_file(file);
-    if (lower_file->f_op && lower_file->f_op->fasync) {
-        return lower_file->f_op->fasync(fd, lower_file, on);
-    }
-    return -ENOSYS;
-}
-
-static ssize_t proxyfs_splice_read(struct file *file,
-                                   loff_t *ppos,
-                                   struct pipe_inode_info *pipe,
-                                   size_t len,
-                                   unsigned int flags) {
-    PROXYFS_DEBUG("name=%s splice_read len=%zu\n", file->f_path.dentry->d_name.name, len);
-    struct file *lower_file = proxyfs_lower_file(file);
-    if (lower_file->f_op && lower_file->f_op->splice_read) {
-        return lower_file->f_op->splice_read(lower_file, ppos, pipe, len, flags);
-    }
-    return -ENOSYS;
-}
-
-static ssize_t proxyfs_splice_write(struct pipe_inode_info *pipe,
-                                    struct file *file,
-                                    loff_t *ppos,
-                                    size_t len,
-                                    unsigned int flags) {
-    PROXYFS_DEBUG("name=%s splice_write len=%zu\n", file->f_path.dentry->d_name.name, len);
-    struct file *lower_file = proxyfs_lower_file(file);
-    if (lower_file->f_op && lower_file->f_op->splice_write) {
-        return lower_file->f_op->splice_write(pipe, lower_file, ppos, len, flags);
-    }
-    return -ENOSYS;
-}
-
-static int proxyfs_check_flags(int flags) {
-    PROXYFS_DEBUG("check_flags flags=%x\n", flags);
-    // Обычно ничего не делается, но делегирование возможно
-    return 0;
-}
 
 #if 0
 static int proxyfs_setlease(struct file *file,
@@ -264,7 +79,7 @@ static int proxyfs_link(struct dentry *old_dentry, struct inode *dir, struct den
 {
     PROXYFS_INODE_DEBUG(dentry, "link\n");
     struct inode *lower_dir = proxyfs_lower_inode(dir);
-    struct inode *lower_inode = proxyfs_lower_inode(d_inode(old_dentry));
+    ///// struct inode *lower_inode = proxyfs_lower_inode(d_inode(old_dentry));
     if (lower_dir->i_op && lower_dir->i_op->link) {
         return lower_dir->i_op->link(old_dentry, lower_dir, dentry);
     }
@@ -366,7 +181,7 @@ static int proxyfs_getattr(struct mnt_idmap *idmap, const struct path *path, str
 // permission
 static int proxyfs_permission(struct mnt_idmap *idmap, struct inode *inode, int mask)
 {
-    struct dentry *dentry = NULL; // Не всегда есть dentry, можно вывести только inode
+    ///// struct dentry *dentry = NULL; // Не всегда есть dentry, можно вывести только inode
     pr_info("%s: %s: inode=%lu mask=0x%x\n", MODULE_NAME, __func__, inode->i_ino, mask);
     struct inode *lower_inode = proxyfs_lower_inode(inode);
     if (lower_inode->i_op && lower_inode->i_op->permission) {
@@ -385,15 +200,6 @@ static int proxyfs_update_time(struct inode *inode, int flags)
     return -ENOSYS;
 }
 
-// file_operations
-static const struct file_operations proxyfs_file_ops = {
-    .open = proxyfs_open,
-    .release = proxyfs_release,
-    .read = proxyfs_read,
-    .write = proxyfs_write,
-    //
-    // TBD: llseek, mmap, etc.
-};
 
 // dir_inode_operations
 static const struct inode_operations proxyfs_dir_inode_ops = {

@@ -9,7 +9,7 @@
 #include <linux/version.h>
 #include <linux/cred.h>
 #include <linux/kernel_read_file.h>
-
+#include <linux/io_uring/cmd.h>
 
 // Get lower file from proxy file
 static struct file *proxyfs_lower_file(const struct file *file) {
@@ -17,7 +17,9 @@ static struct file *proxyfs_lower_file(const struct file *file) {
 }
 
 // llseek()
-static loff_t proxyfs_llseek(struct file *file, loff_t offset, int whence) {
+static loff_t proxyfs_llseek(struct file *file,
+                             loff_t offset,
+                             int whence) {
     PROXYFS_DEBUG("name=%s, offset=%lld, whence=%d\n", file->f_path.dentry->d_name.name, offset, whence);
     struct file *lower_file = proxyfs_lower_file(file);
     if (lower_file->f_op && lower_file->f_op->llseek) {
@@ -27,23 +29,68 @@ static loff_t proxyfs_llseek(struct file *file, loff_t offset, int whence) {
 }
 
 // read()
-static ssize_t proxyfs_read(struct file *file, char __user *buf, size_t count, loff_t *ppos) {
+static ssize_t proxyfs_read(struct file *file,
+                            char __user *buf,
+                            size_t count,
+                            loff_t *ppos) {
     PROXYFS_DEBUG("name=%s, count=%zu\n", file->f_path.dentry->d_name.name, count);
     return kernel_read(proxyfs_lower_file(file), buf, count, ppos);
 }
 
 // write()
-static ssize_t proxyfs_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos) {
+static ssize_t proxyfs_write(struct file *file,
+                             const char __user *buf,
+                             size_t count,
+                             loff_t *ppos) {
     PROXYFS_DEBUG("name=%s, count=%zu\n", file->f_path.dentry->d_name.name, count);
     return kernel_write(proxyfs_lower_file(file), buf, count, ppos);
 }
 
-// ssize_t (*read_iter) (struct kiocb *, struct iov_iter *);
-// ssize_t (*write_iter) (struct kiocb *, struct iov_iter *);
-// int (*iopoll)(struct kiocb *kiocb, struct io_comp_batch *, unsigned int flags);
+// read_iter
+static ssize_t proxyfs_read_iter(struct kiocb *iocb,
+                                 struct iov_iter *to) {
+    struct file *file = iocb->ki_filp;
+    PROXYFS_DEBUG("name=%s\n", file->f_path.dentry->d_name.name);
+    struct file *lower_file = proxyfs_lower_file(file);
+    if (lower_file->f_op && lower_file->f_op->read_iter) {
+        struct kiocb lower_iocb = *iocb;
+        lower_iocb.ki_filp = lower_file;
+        return lower_file->f_op->read_iter(&lower_iocb, to);
+    }
+    return -ENOSYS;
+}
 
+// write_iter
+static ssize_t proxyfs_write_iter(struct kiocb *iocb,
+                                  struct iov_iter *from) {
+    struct file *file = iocb->ki_filp;
+    PROXYFS_DEBUG("name=%s\n", file->f_path.dentry->d_name.name);
+    struct file *lower_file = proxyfs_lower_file(file);
+    if (lower_file->f_op && lower_file->f_op->write_iter) {
+        struct kiocb lower_iocb = *iocb;
+        lower_iocb.ki_filp = lower_file;
+        return lower_file->f_op->write_iter(&lower_iocb, from);
+    }
+    return -ENOSYS;
+}
+
+// iopoll
+static int proxyfs_iopoll(struct kiocb *kiocb,
+                          struct io_comp_batch *batch,
+                          unsigned int flags) {
+    struct file *file = kiocb->ki_filp;
+    PROXYFS_DEBUG("name=%s, flags=0x%x\n", file->f_path.dentry->d_name.name, flags);
+    struct file *lower_file = proxyfs_lower_file(file);
+    if (lower_file->f_op && lower_file->f_op->iopoll) {
+        struct kiocb lower_iocb = *kiocb;
+        lower_iocb.ki_filp = lower_file;
+        return lower_file->f_op->iopoll(&lower_iocb, batch, flags);
+    }
+    return -ENOSYS;
+}
 // iterate_shared()
-static int proxyfs_iterate_shared(struct file *file, struct dir_context *ctx) {
+static int proxyfs_iterate_shared(struct file *file,
+                                  struct dir_context *ctx) {
     PROXYFS_DEBUG("name=%s\n", file->f_path.dentry->d_name.name);
     struct file *lower_file = proxyfs_lower_file(file);
     if (lower_file->f_op && lower_file->f_op->iterate_shared) {
@@ -52,10 +99,21 @@ static int proxyfs_iterate_shared(struct file *file, struct dir_context *ctx) {
     return -ENOSYS;
 }
 
-// __poll_t (*poll) (struct file *, struct poll_table_struct *);
+// poll
+static __poll_t proxyfs_poll(struct file *file,
+                             struct poll_table_struct *pts) {
+    PROXYFS_DEBUG("name=%s\n", file->f_path.dentry->d_name.name);
+    struct file *lower_file = proxyfs_lower_file(file);
+    if (lower_file->f_op && lower_file->f_op->poll) {
+        return lower_file->f_op->poll(lower_file, pts);
+    }
+    return 0;
+}
 
 // unlocked_ioctl()
-static long proxyfs_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
+static long proxyfs_unlocked_ioctl(struct file *file,
+                                   unsigned int cmd,
+                                   unsigned long arg) {
     PROXYFS_DEBUG("name=%s, cmd=0x%x\n", file->f_path.dentry->d_name.name, cmd);
     struct file *lower_file = proxyfs_lower_file(file);
     if (lower_file->f_op && lower_file->f_op->unlocked_ioctl) {
@@ -65,7 +123,9 @@ static long proxyfs_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned
 }
 
 // compat_ioctl()
-static long proxyfs_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
+static long proxyfs_compat_ioctl(struct file *file,
+                                 unsigned int cmd,
+                                 unsigned long arg) {
     PROXYFS_DEBUG("name=%s, cmd=0x%x\n", file->f_path.dentry->d_name.name, cmd);
     struct file *lower_file = proxyfs_lower_file(file);
     if (lower_file->f_op && lower_file->f_op->compat_ioctl) {
@@ -75,7 +135,8 @@ static long proxyfs_compat_ioctl(struct file *file, unsigned int cmd, unsigned l
 }
 
 // mmap()
-static int proxyfs_mmap(struct file *file, struct vm_area_struct *vma) {
+static int proxyfs_mmap(struct file *file,
+                        struct vm_area_struct *vma) {
     PROXYFS_DEBUG("name=%s\n", file->f_path.dentry->d_name.name);
     struct file *lower_file = proxyfs_lower_file(file);
     if (lower_file->f_op && lower_file->f_op->mmap) {
@@ -85,7 +146,8 @@ static int proxyfs_mmap(struct file *file, struct vm_area_struct *vma) {
 }
 
 // open()
-static int proxyfs_open(struct inode *inode, struct file *file) {
+static int proxyfs_open(struct inode *inode,
+                        struct file *file) {
     ///// struct inode *lower_inode = proxyfs_lower_inode(inode);
     struct file *lower_file;
 
@@ -110,7 +172,8 @@ static int proxyfs_open(struct inode *inode, struct file *file) {
 }
 
 // flush()
-static int proxyfs_flush(struct file *file, fl_owner_t id) {
+static int proxyfs_flush(struct file *file,
+                         fl_owner_t id) {
     PROXYFS_DEBUG("name=%s flush\n", file->f_path.dentry->d_name.name);
     struct file *lower_file = proxyfs_lower_file(file);
     if (lower_file->f_op && lower_file->f_op->flush) {
@@ -120,7 +183,8 @@ static int proxyfs_flush(struct file *file, fl_owner_t id) {
 }
 
 // release() / close
-static int proxyfs_release(struct inode *inode, struct file *file) {
+static int proxyfs_release(struct inode *inode,
+                           struct file *file) {
     PROXYFS_DEBUG("inode=%lu, name=%s\n", inode->i_ino, file->f_path.dentry->d_name.name);
     struct file *lower_file = proxyfs_lower_file(file);
     if (lower_file) {
@@ -131,8 +195,11 @@ static int proxyfs_release(struct inode *inode, struct file *file) {
 }
 
 // fsync()
-static int proxyfs_fsync(struct file *file, loff_t start, loff_t end, int datasync) {
-    PROXYFS_DEBUG("name=%s fsync start=%lld end=%lld datasync=%d\n", file->f_path.dentry->d_name.name, start, end, datasync);
+static int proxyfs_fsync(struct file *file,
+                         loff_t start,
+                         loff_t end,
+                         int datasync) {
+    PROXYFS_DEBUG("name=%s, start=%lld, end=%lld, datasync=%d\n", file->f_path.dentry->d_name.name, start, end, datasync);
     struct file *lower_file = proxyfs_lower_file(file);
     if (lower_file->f_op && lower_file->f_op->fsync) {
         return lower_file->f_op->fsync(lower_file, start, end, datasync);
@@ -141,8 +208,10 @@ static int proxyfs_fsync(struct file *file, loff_t start, loff_t end, int datasy
 }
 
 // fasync()
-static int proxyfs_fasync(int fd, struct file *file, int on) {
-    PROXYFS_DEBUG("name=%s fasync fd=%d on=%d\n", file->f_path.dentry->d_name.name, fd, on);
+static int proxyfs_fasync(int fd,
+                          struct file *file,
+                          int on) {
+    PROXYFS_DEBUG("name=%s, fd=%d, on=%d\n", file->f_path.dentry->d_name.name, fd, on);
     struct file *lower_file = proxyfs_lower_file(file);
     if (lower_file->f_op && lower_file->f_op->fasync) {
         return lower_file->f_op->fasync(fd, lower_file, on);
@@ -150,8 +219,31 @@ static int proxyfs_fasync(int fd, struct file *file, int on) {
     return -ENOSYS;
 }
 
-// int (*lock) (struct file *, int, struct file_lock *);
-// unsigned long (*get_unmapped_area)(struct file *, unsigned long, unsigned long, unsigned long, unsigned long);
+// lock
+static int proxyfs_lock(struct file *file,
+                        int cmd,
+                        struct file_lock *fl) {
+    PROXYFS_DEBUG("name=%s, cmd=%d\n", file->f_path.dentry->d_name.name, cmd);
+    struct file *lower_file = proxyfs_lower_file(file);
+    if (lower_file->f_op && lower_file->f_op->lock) {
+        return lower_file->f_op->lock(lower_file, cmd, fl);
+    }
+    return -ENOSYS;
+}
+
+// get_unmapped_area
+static unsigned long proxyfs_get_unmapped_area(struct file *file,
+                                               unsigned long uaddr,
+                                               unsigned long len,
+                                               unsigned long pgoff,
+                                               unsigned long flags) {
+    PROXYFS_DEBUG("name=%s, len=%lu\n", file->f_path.dentry->d_name.name, len);
+    struct file *lower_file = proxyfs_lower_file(file);
+    if (lower_file->f_op && lower_file->f_op->get_unmapped_area) {
+        return lower_file->f_op->get_unmapped_area(lower_file, uaddr, len, pgoff, flags);
+    }
+    return 0;
+}
 
 // check_flags()
 static int proxyfs_check_flags(int flags) {
@@ -161,7 +253,17 @@ static int proxyfs_check_flags(int flags) {
     return 0;
 }
 
-// int (*flock) (struct file *, int, struct file_lock *);
+// flock
+static int proxyfs_flock(struct file *file,
+                         int cmd,
+                         struct file_lock *fl) {
+    PROXYFS_DEBUG("name=%s, cmd=%d\n", file->f_path.dentry->d_name.name, cmd);
+    struct file *lower_file = proxyfs_lower_file(file);
+    if (lower_file->f_op && lower_file->f_op->flock) {
+        return lower_file->f_op->flock(lower_file, cmd, fl);
+    }
+    return -ENOSYS;
+}
 
 // splice_write()
 static ssize_t proxyfs_splice_write(struct pipe_inode_info *pipe,
@@ -169,7 +271,7 @@ static ssize_t proxyfs_splice_write(struct pipe_inode_info *pipe,
                                     loff_t *ppos,
                                     size_t len,
                                     unsigned int flags) {
-    PROXYFS_DEBUG("name=%s splice_write len=%zu\n", file->f_path.dentry->d_name.name, len);
+    PROXYFS_DEBUG("name=%s, len=%zu\n", file->f_path.dentry->d_name.name, len);
     struct file *lower_file = proxyfs_lower_file(file);
     if (lower_file->f_op && lower_file->f_op->splice_write) {
         return lower_file->f_op->splice_write(pipe, lower_file, ppos, len, flags);
@@ -183,7 +285,7 @@ static ssize_t proxyfs_splice_read(struct file *file,
                                    struct pipe_inode_info *pipe,
                                    size_t len,
                                    unsigned int flags) {
-    PROXYFS_DEBUG("name=%s splice_read len=%zu\n", file->f_path.dentry->d_name.name, len);
+    PROXYFS_DEBUG("name=%s, len=%zu\n", file->f_path.dentry->d_name.name, len);
     struct file *lower_file = proxyfs_lower_file(file);
     if (lower_file->f_op && lower_file->f_op->splice_read) {
         return lower_file->f_op->splice_read(lower_file, ppos, pipe, len, flags);
@@ -191,18 +293,143 @@ static ssize_t proxyfs_splice_read(struct file *file,
     return -ENOSYS;
 }
 
-// void (*splice_eof)(struct file *file);
-// int (*setlease)(struct file *, int, struct file_lease **, void **);
-// long (*fallocate)(struct file *file, int mode, loff_t offset, loff_t len);
-// void (*show_fdinfo)(struct seq_file *m, struct file *f);
+// splice_eof
+static void proxyfs_splice_eof(struct file *file) {
+    PROXYFS_DEBUG("name=%s\n", file->f_path.dentry->d_name.name);
+    struct file *lower_file = proxyfs_lower_file(file);
+    if (lower_file->f_op && lower_file->f_op->splice_eof) {
+        lower_file->f_op->splice_eof(lower_file);
+    }
+}
+
+// setlease
+static int proxyfs_setlease(struct file *file,
+                            int arg,
+                            struct file_lease **flp,
+                            void **priv) {
+    PROXYFS_DEBUG("name=%s, arg=%d\n", file->f_path.dentry->d_name.name, arg);
+    struct file *lower_file = proxyfs_lower_file(file);
+    if (lower_file->f_op && lower_file->f_op->setlease) {
+        return lower_file->f_op->setlease(lower_file, arg, flp, priv);
+    }
+    return -ENOSYS;
+}
+
+// fallocate
+static long proxyfs_fallocate(struct file *file,
+                              int mode,
+                              loff_t offset,
+                              loff_t len) {
+    PROXYFS_DEBUG("name=%s, mode=%d, offset=%lld, len=%lld\n", file->f_path.dentry->d_name.name, mode, offset, len);
+    struct file *lower_file = proxyfs_lower_file(file);
+    if (lower_file->f_op && lower_file->f_op->fallocate) {
+        return lower_file->f_op->fallocate(lower_file, mode, offset, len);
+    }
+    return -ENOSYS;
+}
+
+// show_fdinfo
+static void proxyfs_show_fdinfo(struct seq_file *m,
+                                struct file *f) {
+    PROXYFS_DEBUG("name=%s\n", f->f_path.dentry->d_name.name);
+    struct file *lower_file = proxyfs_lower_file(f);
+    if (lower_file->f_op && lower_file->f_op->show_fdinfo) {
+        lower_file->f_op->show_fdinfo(m, lower_file);
+    }
+}
+
 #ifndef CONFIG_MMU
-// unsigned (*mmap_capabilities)(struct file *);
+// mmap_capabilities
+static unsigned proxyfs_mmap_capabilities(struct file *file) {
+    PROXYFS_DEBUG("name=%s\n", file->f_path.dentry->d_name.name);
+    struct file *lower_file = proxyfs_lower_file(file);
+    if (lower_file->f_op && lower_file->f_op->mmap_capabilities) {
+        return lower_file->f_op->mmap_capabilities(lower_file);
+    }
+    return 0;
+}
 #endif
+
 // ssize_t (*copy_file_range)(struct file *, loff_t, struct file *, loff_t, size_t, unsigned int);
-// loff_t (*remap_file_range)(struct file *file_in, loff_t pos_in, struct file *file_out, loff_t pos_out, loff_t len, unsigned int remap_flags);
-// int (*fadvise)(struct file *, loff_t, loff_t, int);
-// int (*uring_cmd)(struct io_uring_cmd *ioucmd, unsigned int issue_flags);
-// int (*uring_cmd_iopoll)(struct io_uring_cmd *, struct io_comp_batch *, unsigned int poll_flags);
+// copy_file_range
+static ssize_t proxyfs_copy_file_range(struct file *file_in,
+                                       loff_t pos_in,
+                                       struct file *file_out,
+                                       loff_t pos_out,
+                                       size_t len,
+                                       unsigned int flags) {
+    PROXYFS_DEBUG("name_in=%s, name_out=%s, len=%zu\n",
+                  file_in->f_path.dentry->d_name.name,
+                  file_out->f_path.dentry->d_name.name,
+                  len);
+    struct file *lower_in = proxyfs_lower_file(file_in);
+    struct file *lower_out = proxyfs_lower_file(file_out);
+    if (lower_in->f_op && lower_in->f_op->copy_file_range) {
+        return lower_in->f_op->copy_file_range(lower_in, pos_in, lower_out, pos_out, len, flags);
+    }
+    return -ENOSYS;
+}
+
+// remap_file_range
+static loff_t proxyfs_remap_file_range(struct file *file_in,
+                                       loff_t pos_in,
+                                       struct file *file_out,
+                                       loff_t pos_out,
+                                       loff_t len,
+                                       unsigned int remap_flags) {
+    PROXYFS_DEBUG("name_in=%s, name_out=%s, len=%lld\n",
+                  file_in->f_path.dentry->d_name.name,
+                  file_out->f_path.dentry->d_name.name,
+                  len);
+    struct file *lower_in = proxyfs_lower_file(file_in);
+    struct file *lower_out = proxyfs_lower_file(file_out);
+    if (lower_in->f_op && lower_in->f_op->remap_file_range) {
+        return lower_in->f_op->remap_file_range(lower_in, pos_in, lower_out, pos_out, len, remap_flags);
+    }
+    return -ENOSYS;
+}
+
+// fadvise
+static int proxyfs_fadvise(struct file *file,
+                           loff_t offset,
+                           loff_t len,
+                           int advice) {
+    PROXYFS_DEBUG("name=%s, offset=%lld, len=%lld, advice=%d\n", file->f_path.dentry->d_name.name, offset, len, advice);
+    struct file *lower_file = proxyfs_lower_file(file);
+    if (lower_file->f_op && lower_file->f_op->fadvise) {
+        return lower_file->f_op->fadvise(lower_file, offset, len, advice);
+    }
+    return -ENOSYS;
+}
+
+// uring_cmd
+static int proxyfs_uring_cmd(struct io_uring_cmd *ioucmd,
+                             unsigned int issue_flags) {
+    struct file *file = ioucmd->file;
+    PROXYFS_DEBUG("name=%s, flags=0x%x\n", file->f_path.dentry->d_name.name, issue_flags);
+    struct file *lower_file = proxyfs_lower_file(file);
+    if (lower_file->f_op && lower_file->f_op->uring_cmd) {
+        struct io_uring_cmd lower_cmd = *ioucmd;
+        lower_cmd.file = lower_file;
+        return lower_file->f_op->uring_cmd(&lower_cmd, issue_flags);
+    }
+    return -ENOSYS;
+}
+
+// uring_cmd_iopoll
+static int proxyfs_uring_cmd_iopoll(struct io_uring_cmd *ioucmd,
+                                    struct io_comp_batch *batch,
+                                    unsigned int poll_flags) {
+    struct file *file = ioucmd->file;
+    PROXYFS_DEBUG("name=%s, flags=0x%x\n", file->f_path.dentry->d_name.name, poll_flags);
+    struct file *lower_file = proxyfs_lower_file(file);
+    if (lower_file->f_op && lower_file->f_op->uring_cmd_iopoll) {
+        struct io_uring_cmd lower_cmd = *ioucmd;
+        lower_cmd.file = lower_file;
+        return lower_file->f_op->uring_cmd_iopoll(&lower_cmd, batch, poll_flags);
+    }
+    return -ENOSYS;
+}
 
 // file_operations
 const struct file_operations proxyfs_file_ops = {
@@ -218,15 +445,15 @@ const struct file_operations proxyfs_file_ops = {
 	// ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *);
     .write = proxyfs_write,
 	// ssize_t (*read_iter) (struct kiocb *, struct iov_iter *);
-    .read_iter = NULL,
+    .read_iter = proxyfs_read_iter,
 	// ssize_t (*write_iter) (struct kiocb *, struct iov_iter *);
-    .write_iter = NULL,
+    .write_iter = proxyfs_write_iter,
 	// int (*iopoll)(struct kiocb *kiocb, struct io_comp_batch *, unsigned int flags);
-    .iopoll = NULL,
+    .iopoll = proxyfs_iopoll,
 	// int (*iterate_shared) (struct file *, struct dir_context *);
     .iterate_shared = proxyfs_iterate_shared,
 	// __poll_t (*poll) (struct file *, struct poll_table_struct *);
-    .poll = NULL,
+    .poll = proxyfs_poll,
 	// long (*unlocked_ioctl) (struct file *, unsigned int, unsigned long);
     .unlocked_ioctl = proxyfs_unlocked_ioctl,
     // long (*compat_ioctl) (struct file *, unsigned int, unsigned long);
@@ -244,37 +471,37 @@ const struct file_operations proxyfs_file_ops = {
 	// int (*fasync) (int, struct file *, int);
     .fasync = proxyfs_fasync,
 	// int (*lock) (struct file *, int, struct file_lock *);
-    .lock = NULL,
+    .lock = proxyfs_lock,
 	// unsigned long (*get_unmapped_area)(struct file *, unsigned long, unsigned long, unsigned long, unsigned long);
-    .get_unmapped_area = NULL,
+    .get_unmapped_area = proxyfs_get_unmapped_area,
 	// int (*check_flags)(int);
     .check_flags = proxyfs_check_flags,
 	// int (*flock) (struct file *, int, struct file_lock *);
-    .flock = NULL,
+    .flock = proxyfs_flock,
 	// ssize_t (*splice_write)(struct pipe_inode_info *, struct file *, loff_t *, size_t, unsigned int);
     .splice_write = proxyfs_splice_write,
 	// ssize_t (*splice_read)(struct file *, loff_t *, struct pipe_inode_info *, size_t, unsigned int);
     .splice_read = proxyfs_splice_read,
 	// void (*splice_eof)(struct file *file);
-    .splice_eof = NULL,
+    .splice_eof = proxyfs_splice_eof,
 	// int (*setlease)(struct file *, int, struct file_lease **, void **);
-    .setlease = NULL,
+    .setlease = proxyfs_setlease,
 	// long (*fallocate)(struct file *file, int mode, loff_t offset, loff_t len);
-    .fallocate = NULL,
+    .fallocate = proxyfs_fallocate,
 	// void (*show_fdinfo)(struct seq_file *m, struct file *f);
-    .show_fdinfo = NULL,
+    .show_fdinfo = proxyfs_show_fdinfo,
 #ifndef CONFIG_MMU
 	// unsigned (*mmap_capabilities)(struct file *);
-    .mmap_capabilities = NULL,
+    .mmap_capabilities = proxyfs_mmap_capabilities,
 #endif
 	// ssize_t (*copy_file_range)(struct file *, loff_t, struct file *, loff_t, size_t, unsigned int);
-    .copy_file_range = NULL,
+    .copy_file_range = proxyfs_copy_file_range,
 	// loff_t (*remap_file_range)(struct file *file_in, loff_t pos_in, struct file *file_out, loff_t pos_out, loff_t len, unsigned int remap_flags);
-    .remap_file_range = NULL,
+    .remap_file_range = proxyfs_remap_file_range,
 	// int (*fadvise)(struct file *, loff_t, loff_t, int);
-    .fadvise = NULL,
+    .fadvise = proxyfs_fadvise,
 	// int (*uring_cmd)(struct io_uring_cmd *ioucmd, unsigned int issue_flags);
-    .uring_cmd = NULL,
+    .uring_cmd = proxyfs_uring_cmd,
 	// int (*uring_cmd_iopoll)(struct io_uring_cmd *, struct io_comp_batch *, unsigned int poll_flags);
-    .uring_cmd_iopoll = NULL,
+    .uring_cmd_iopoll = proxyfs_uring_cmd_iopoll,
 };

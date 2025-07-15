@@ -117,7 +117,7 @@ unsigned int proxyfs_context_buffer_pool_get_buffer_size(struct proxyfs_context_
 struct sock* proxyfs_socket_init(const int nl_unit_id);
 void proxyfs_socket_release(struct sock* nl_socket);
 void proxyfs_socket_send_msg(const char* msg_body,
-                                 size_t msg_len);
+                             size_t msg_len);
 
 //
 // Procfs specific routines
@@ -126,5 +126,14 @@ void proxyfs_procfs_release(void);
 
 extern const struct file_operations proxyfs_file_ops;
 extern const struct inode_operations proxyfs_dir_inode_ops;
+extern const struct super_operations proxyfs_super_ops;
+extern const struct dentry_operations proxyfs_dentry_ops;
+
+//
+// This routine is used to poupulate proxyfs super block,
+// see `struct proxyfs_sb_info` above
+int proxyfs_fill_super(struct super_block *sb,
+                       void *data,
+                       int silent);
 
 #endif //  !__PROXYFS_H__

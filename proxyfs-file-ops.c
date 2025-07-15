@@ -16,7 +16,10 @@
 
 // Get lower file from proxy file
 static struct file *proxyfs_lower_file(const struct file *file) {
-    return ((struct proxyfs_file_info *)file->private_data)->lower_file;
+    if (file) {
+        return ((struct proxyfs_file_info *)file->private_data)->lower_file;
+    }
+    return NULL;
 }
 
 // llseek()
@@ -437,7 +440,7 @@ static int proxyfs_uring_cmd_iopoll(struct io_uring_cmd *ioucmd,
 // file_operations
 const struct file_operations proxyfs_file_ops = {
 	// struct module *owner;
-    .owner = NULL,
+    .owner = THIS_MODULE,
 	// fop_flags_t fop_flags;
     .fop_flags = 0,
 	// loff_t (*llseek) (struct file *, loff_t, int);

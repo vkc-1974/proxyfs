@@ -13,55 +13,7 @@
 #include <linux/cred.h>
 #include <linux/kernel_read_file.h>
 
-// Get lower super block from proxy file
-static struct super_block *proxyfs_lower_sb(const struct super_block *sb) {
-    return ((struct proxyfs_sb_info *)sb->s_fs_info)->lower_sb;
-}
-
-static const struct super_operations proxyfs_super_ops = {
-    .statfs     = simple_statfs,
-    .drop_inode = generic_delete_inode,
-};
-
 // proxyfs is mounted over ext4
-static int proxyfs_fill_super(struct super_block *sb,
-                              void *data,
-                              int silent) {
-    struct super_block *lower_sb;
-    struct inode *inode, *lower_inode;
-    char *lower_path = (char *)data;
-    struct path lower_root;
-
-    // Looking for root node of underlying FS
-    if (kern_path(lower_path, LOOKUP_FOLLOW, &lower_root)) {
-        pr_err("%s: %s: cannot find lowerdir %s\n",
-               MODULE_NAME,
-               __FUNCTION__,
-               lower_path);
-        return -ENOENT;
-    }
-    lower_sb = lower_root.dentry->d_sb;
-
-    // Safe lower super block
-    sb->s_fs_info = kzalloc(sizeof(struct proxyfs_sb_info), GFP_KERNEL);
-    ((struct proxyfs_sb_info *)sb->s_fs_info)->lower_sb = lower_sb;
-    sb->s_magic = PROXYFS_MAGIC;
-    sb->s_op = &proxyfs_super_ops;
-
-    // Create root inode
-    lower_inode = lower_root.dentry->d_inode;
-    inode = new_inode(sb);
-    if (!inode) {
-        return -ENOMEM;
-    }
-    inode->i_ino = lower_inode->i_ino;
-    inode->i_op = &proxyfs_dir_inode_ops;
-    inode->i_fop = &proxyfs_file_ops;
-    ((struct proxyfs_inode_info *)inode)->lower_inode = lower_inode;
-    sb->s_root = d_make_root(inode);
-
-    return sb->s_root ? 0 : -ENOMEM;
-}
 
 // mount routine
 static struct dentry *proxyfs_mount(struct file_system_type *fs_type,

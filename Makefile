@@ -2,6 +2,9 @@ obj-m := \
 	proxyfs.o
 
 proxyfs-objs := \
+	proxyfs-dentry-ops.o \
+	proxyfs-super-block.o \
+	proxyfs-super-ops.o \
 	proxyfs-dir-inode-ops.o \
 	proxyfs-file-ops.o \
 	proxyfs-main.o \

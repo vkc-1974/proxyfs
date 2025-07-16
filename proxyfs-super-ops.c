@@ -18,7 +18,8 @@ static struct inode *proxyfs_alloc_inode(struct super_block *sb)
     if ((inode = kzalloc(sizeof(struct proxyfs_inode), GFP_KERNEL)) == NULL) {
         return NULL;
     }
-    // inode->lower_inode = NULL;
+    inode->vfs_inode.i_mapping->a_ops = &proxyfs_mapping_ops;
+
     return (struct inode *)inode;
 }
 

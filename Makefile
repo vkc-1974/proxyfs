@@ -2,6 +2,7 @@ obj-m := \
 	proxyfs.o
 
 proxyfs-objs := \
+	proxyfs-mapping-ops.o \
 	proxyfs-main.o \
 	proxyfs-buffer-pool.o \
 	proxyfs-context.o \

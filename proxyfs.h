@@ -161,6 +161,7 @@ extern const struct file_operations proxyfs_file_ops;
 extern const struct inode_operations proxyfs_inode_ops;
 extern const struct super_operations proxyfs_super_ops;
 extern const struct dentry_operations proxyfs_dentry_ops;
+extern const struct address_space_operations proxyfs_mapping_ops;
 
 //
 // This routine is used to poupulate proxyfs super block,

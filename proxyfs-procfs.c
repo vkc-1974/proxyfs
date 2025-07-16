@@ -1,43 +1,50 @@
-// File		:proxyfs_procfs.c
+// File		:proxyfs-procfs.c
 // Author	:Victor Kovalevich
 // Created	:Fri Jul 11 13:09:17 2025
+#include <linux/proc_fs.h>
 #include "proxyfs.h"
 
-static int proxyfs_procfs_unitid_show(struct seq_file* m, void* v) {
+static int proxyfs_procfs_unitid_show(struct seq_file* m, void* v)
+{
     seq_printf(m, "%d\n", PROXYFS_NETLINK_USER);
     return 0;
 }
 
-static int proxyfs_procfs_filters_show(struct seq_file* m, void* v) {
+static int proxyfs_procfs_filters_show(struct seq_file* m, void* v)
+{
     seq_printf(m, "%s\n", "filters - NOT IMPLEMENTED YET");
     return 0;
 }
 
-static int proxyfs_procfs_pids_show(struct seq_file* m, void* v) {
+static int proxyfs_procfs_pids_show(struct seq_file* m, void* v)
+{
     seq_printf(m, "%s\n", "pids - NOT IMPLEMENTED YET");
     return 0;
 }
 
-static int proxyfs_procfs_unitid_open(struct inode* inode, struct file* file) {
+static int proxyfs_procfs_unitid_open(struct inode* inode, struct file* file)
+{
     return single_open(file, proxyfs_procfs_unitid_show, NULL);
 }
 
-static int proxyfs_procfs_filters_open(struct inode* inode, struct file* file) {
+static int proxyfs_procfs_filters_open(struct inode* inode, struct file* file)
+{
     return single_open(file, proxyfs_procfs_filters_show, NULL);
 }
 
-static int proxyfs_procfs_pids_open(struct inode* inode, struct file* file) {
+static int proxyfs_procfs_pids_open(struct inode* inode, struct file* file)
+{
     return single_open(file, proxyfs_procfs_pids_show, NULL);
 }
 
-static const struct proc_ops proxyfs_procfs_unitid_ops = {
+static const struct proc_ops proxyfs_procfs_unitid_ops ={
     .proc_open = proxyfs_procfs_unitid_open,
     .proc_read = seq_read,
     .proc_lseek = seq_lseek,
     .proc_release = single_release,
 };
 
-static const struct proc_ops proxyfs_procfs_filters_ops = {
+static const struct proc_ops proxyfs_procfs_filters_ops ={
     .proc_open = proxyfs_procfs_filters_open,
     .proc_read = seq_read,
     .proc_lseek = seq_lseek,
@@ -51,7 +58,8 @@ static const struct proc_ops proxyfs_procfs_pids_ops = {
     .proc_release = single_release,
 };
 
-struct proc_dir_entry* proxyfs_procfs_setup(void) {
+struct proc_dir_entry* proxyfs_procfs_setup(void)
+{
     struct proc_dir_entry* lsm_proc_dir;
 
     if ((lsm_proc_dir = proc_mkdir(PROXYFS_PROCFS_DIR, NULL)) == NULL) {
@@ -84,6 +92,7 @@ struct proc_dir_entry* proxyfs_procfs_setup(void) {
     return lsm_proc_dir;
 }
 
-void proxyfs_procfs_release(void) {
+void proxyfs_procfs_release(void)
+{
     remove_proc_subtree(PROXYFS_PROCFS_DIR, NULL);
 }

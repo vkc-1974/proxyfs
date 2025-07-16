@@ -7,59 +7,58 @@
 #include <linux/quota.h>
 #include <linux/writeback.h>
 
-// Get super block of underlying FS
-static struct super_block *proxyfs_lower_sb(const struct super_block *sb) {
-    return ((struct proxyfs_sb_info *)sb->s_fs_info)->lower_sb;
-}
-
 // alloc_inode()
-static struct inode *proxyfs_alloc_inode(struct super_block *sb) {
+static struct inode *proxyfs_alloc_inode(struct super_block *sb)
+{
     PROXYFS_DEBUG("\n");
     if (sb == NULL) {
         return NULL;
     }
-    struct proxyfs_inode_info *info;
-    if ((info = kmalloc(sizeof(struct proxyfs_inode_info), GFP_KERNEL)) == NULL) {
+    struct proxyfs_inode *inode;
+    if ((inode = kzalloc(sizeof(struct proxyfs_inode), GFP_KERNEL)) == NULL) {
         return NULL;
     }
-    info->lower_inode = NULL;
-    return &info->vfs_inode;
+    // inode->lower_inode = NULL;
+    return (struct inode *)inode;
 }
 
 // destroy_inode()
-static void proxyfs_destroy_inode(struct inode *inode) {
+static void proxyfs_destroy_inode(struct inode *inode)
+{
     PROXYFS_DEBUG("\n");
     if (inode == NULL) {
         return;
     }
-    struct proxyfs_inode_info *info = container_of(inode, struct proxyfs_inode_info, vfs_inode);
-    if (info->lower_inode) {
+    struct proxyfs_inode *proxyfs_inode = container_of(inode, struct proxyfs_inode, vfs_inode);
+    if (proxyfs_inode->lower_inode) {
         // Decrement of refcount of underlying FS's inode (or even release it at all)
-        iput(info->lower_inode);
-        info->lower_inode = NULL;
+        iput(proxyfs_inode->lower_inode);
+        proxyfs_inode->lower_inode = NULL;
     }
-    kfree(info);
+    kfree(proxyfs_inode);
 }
 
 // free_inode()
-static void proxyfs_free_inode(struct inode *inode) {
+static void proxyfs_free_inode(struct inode *inode)
+{
     PROXYFS_DEBUG("\n");
     if (inode == NULL) {
         return;
     }
-    struct proxyfs_inode_info *info = container_of(inode, struct proxyfs_inode_info, vfs_inode);
-    if (info->lower_inode) {
+    struct proxyfs_inode *proxyfs_inode = container_of(inode, struct proxyfs_inode, vfs_inode);
+    if (proxyfs_inode->lower_inode) {
         // TBD: ???
         // // Decrement of refcount of underlying FS's inode (or even release it at all)
         // iput(info->lower_inode);
         // info->lower_inode = NULL;
     }
-    kfree(info);
+    kfree(proxyfs_inode);
 }
 
 // dirty_inode()
 static void proxyfs_dirty_inode(struct inode *inode,
-                                int flags) {
+                                int flags)
+{
     PROXYFS_DEBUG("flags=%d\n", flags);
     struct super_block *lower_sb = proxyfs_lower_sb(inode->i_sb);
     if (lower_sb->s_op && lower_sb->s_op->dirty_inode) {
@@ -69,7 +68,8 @@ static void proxyfs_dirty_inode(struct inode *inode,
 
 // write_inode()
 static int proxyfs_write_inode(struct inode *inode,
-                               struct writeback_control *wbc) {
+                               struct writeback_control *wbc)
+{
     PROXYFS_DEBUG("\n");
     struct super_block *lower_sb = proxyfs_lower_sb(inode->i_sb);
     if (lower_sb->s_op && lower_sb->s_op->write_inode) {
@@ -79,7 +79,8 @@ static int proxyfs_write_inode(struct inode *inode,
 }
 
 // drop_inode()
-static int proxyfs_drop_inode(struct inode *inode) {
+static int proxyfs_drop_inode(struct inode *inode)
+{
     PROXYFS_DEBUG("\n");
     struct super_block *lower_sb = proxyfs_lower_sb(inode->i_sb);
     if (lower_sb->s_op && lower_sb->s_op->drop_inode) {
@@ -89,7 +90,8 @@ static int proxyfs_drop_inode(struct inode *inode) {
 }
 
 // evict_inode()
-static void proxyfs_evict_inode(struct inode *inode) {
+static void proxyfs_evict_inode(struct inode *inode)
+{
     PROXYFS_DEBUG("\n");
     struct super_block *lower_sb = proxyfs_lower_sb(inode->i_sb);
     if (lower_sb->s_op && lower_sb->s_op->evict_inode) {
@@ -98,7 +100,8 @@ static void proxyfs_evict_inode(struct inode *inode) {
 }
 
 // put_super()
-static void proxyfs_put_super(struct super_block *sb) {
+static void proxyfs_put_super(struct super_block *sb)
+{
     PROXYFS_DEBUG("\n");
     struct super_block *lower_sb = proxyfs_lower_sb(sb);
     if (lower_sb->s_op && lower_sb->s_op->put_super) {
@@ -108,7 +111,8 @@ static void proxyfs_put_super(struct super_block *sb) {
 
 // sync_fs()
 static int proxyfs_sync_fs(struct super_block *sb,
-                           int wait) {
+                           int wait)
+{
     PROXYFS_DEBUG("wait=%d\n", wait);
     struct super_block *lower_sb = proxyfs_lower_sb(sb);
     if (lower_sb->s_op && lower_sb->s_op->sync_fs) {
@@ -119,7 +123,8 @@ static int proxyfs_sync_fs(struct super_block *sb,
 
 // freeze_super()
 static int proxyfs_freeze_super(struct super_block *sb,
-                                enum freeze_holder who) {
+                                enum freeze_holder who)
+{
     PROXYFS_DEBUG("who=%d\n", who);
     struct super_block *lower_sb = proxyfs_lower_sb(sb);
     if (lower_sb->s_op && lower_sb->s_op->freeze_super) {
@@ -129,7 +134,8 @@ static int proxyfs_freeze_super(struct super_block *sb,
 }
 
 // freeze_fs()
-static int proxyfs_freeze_fs(struct super_block *sb) {
+static int proxyfs_freeze_fs(struct super_block *sb)
+{
     PROXYFS_DEBUG("\n");
     struct super_block *lower_sb = proxyfs_lower_sb(sb);
     if (lower_sb->s_op && lower_sb->s_op->freeze_fs) {
@@ -140,7 +146,8 @@ static int proxyfs_freeze_fs(struct super_block *sb) {
 
 // thaw_super()
 static int proxyfs_thaw_super(struct super_block *sb,
-                              enum freeze_holder who) {
+                              enum freeze_holder who)
+{
     PROXYFS_DEBUG("who=%d\n", who);
     struct super_block *lower_sb = proxyfs_lower_sb(sb);
     if (lower_sb->s_op && lower_sb->s_op->thaw_super) {
@@ -150,7 +157,8 @@ static int proxyfs_thaw_super(struct super_block *sb,
 }
 
 // unfreeze_fs()
-static int proxyfs_unfreeze_fs(struct super_block *sb) {
+static int proxyfs_unfreeze_fs(struct super_block *sb)
+{
     PROXYFS_DEBUG("\n");
     struct super_block *lower_sb = proxyfs_lower_sb(sb);
     if (lower_sb->s_op && lower_sb->s_op->unfreeze_fs) {
@@ -161,7 +169,8 @@ static int proxyfs_unfreeze_fs(struct super_block *sb) {
 
 // statfs()
 static int proxyfs_statfs(struct dentry *dentry,
-                          struct kstatfs *buf) {
+                          struct kstatfs *buf)
+{
     PROXYFS_DEBUG("\n");
     struct super_block *lower_sb = proxyfs_lower_sb(dentry->d_sb);
     if (lower_sb->s_op && lower_sb->s_op->statfs) {
@@ -173,7 +182,8 @@ static int proxyfs_statfs(struct dentry *dentry,
 // remount_fs()
 static int proxyfs_remount_fs(struct super_block *sb,
                               int *flags,
-                              char *data) {
+                              char *data)
+{
     PROXYFS_DEBUG("\n");
     struct super_block *lower_sb = proxyfs_lower_sb(sb);
     if (lower_sb->s_op && lower_sb->s_op->remount_fs) {
@@ -183,7 +193,8 @@ static int proxyfs_remount_fs(struct super_block *sb,
 }
 
 // umount_begin()
-static void proxyfs_umount_begin(struct super_block *sb) {
+static void proxyfs_umount_begin(struct super_block *sb)
+{
     PROXYFS_DEBUG("\n");
     struct super_block *lower_sb = proxyfs_lower_sb(sb);
     if (lower_sb->s_op && lower_sb->s_op->umount_begin) {
@@ -197,7 +208,8 @@ static ssize_t proxyfs_quota_read(struct super_block *sb,
                                   int type,
                                   char *data,
                                   size_t len,
-                                  loff_t off) {
+                                  loff_t off)
+{
     PROXYFS_DEBUG("\n");
     struct super_block *lower_sb = proxyfs_lower_sb(sb);
     if (lower_sb->s_op && lower_sb->s_op->quota_read) {
@@ -211,7 +223,8 @@ static ssize_t proxyfs_quota_write(struct super_block *sb,
                                    int type,
                                    const char *data,
                                    size_t len,
-                                   loff_t off) {
+                                   loff_t off)
+{
     PROXYFS_DEBUG("\n");
     struct super_block *lower_sb = proxyfs_lower_sb(sb);
     if (lower_sb->s_op && lower_sb->s_op->quota_write) {
@@ -221,7 +234,8 @@ static ssize_t proxyfs_quota_write(struct super_block *sb,
 }
 
 // get_dquots()
-static struct dquot __rcu **proxyfs_get_dquots(struct inode *inode) {
+static struct dquot __rcu **proxyfs_get_dquots(struct inode *inode)
+{
     PROXYFS_DEBUG("\n");
     struct super_block *lower_sb = proxyfs_lower_sb(inode->i_sb);
     if (lower_sb->s_op && lower_sb->s_op->get_dquots) {
@@ -233,7 +247,8 @@ static struct dquot __rcu **proxyfs_get_dquots(struct inode *inode) {
 
 // nr_cached_objects()
 static long proxyfs_nr_cached_objects(struct super_block *sb,
-                                      struct shrink_control *sc) {
+                                      struct shrink_control *sc)
+{
     PROXYFS_DEBUG("\n");
     struct super_block *lower_sb = proxyfs_lower_sb(sb);
     if (lower_sb->s_op && lower_sb->s_op->nr_cached_objects) {
@@ -244,7 +259,8 @@ static long proxyfs_nr_cached_objects(struct super_block *sb,
 
 // free_cached_objects()
 static long proxyfs_free_cached_objects(struct super_block *sb,
-                                        struct shrink_control *sc) {
+                                        struct shrink_control *sc)
+{
     PROXYFS_DEBUG("\n");
     struct super_block *lower_sb = proxyfs_lower_sb(sb);
     if (lower_sb->s_op && lower_sb->s_op->free_cached_objects) {
@@ -254,7 +270,8 @@ static long proxyfs_free_cached_objects(struct super_block *sb,
 }
 
 // shutdown()
-static void proxyfs_shutdown(struct super_block *sb) {
+static void proxyfs_shutdown(struct super_block *sb)
+{
     PROXYFS_DEBUG("\n");
     struct super_block *lower_sb = proxyfs_lower_sb(sb);
     if (lower_sb->s_op && lower_sb->s_op->shutdown) {
@@ -264,7 +281,8 @@ static void proxyfs_shutdown(struct super_block *sb) {
 
 // show_options()
 static int proxyfs_show_options(struct seq_file *seq,
-                                struct dentry *root) {
+                                struct dentry *root)
+{
     PROXYFS_DEBUG("\n");
     seq_printf(seq, ",proxyfs=1");
     return 0;
@@ -272,7 +290,8 @@ static int proxyfs_show_options(struct seq_file *seq,
 
 // show_devname()
 static int proxyfs_show_devname(struct seq_file *seq,
-                                struct dentry *root) {
+                                struct dentry *root)
+{
     PROXYFS_DEBUG("\n");
     seq_printf(seq, "proxyfs");
     return 0;
@@ -280,14 +299,16 @@ static int proxyfs_show_devname(struct seq_file *seq,
 
 // show_path()
 static int proxyfs_show_path(struct seq_file *seq,
-                             struct dentry *root) {
+                             struct dentry *root)
+{
     PROXYFS_DEBUG("\n");
     seq_printf(seq, "/ (via proxyfs)");
     return 0;
 }
 
 // show_stats()
-static int proxyfs_show_stats(struct seq_file *seq, struct dentry *root) {
+static int proxyfs_show_stats(struct seq_file *seq, struct dentry *root)
+{
     PROXYFS_DEBUG("\n");
     seq_printf(seq, "ProxyFS statistics: (no real stats, proxy only)\n");
     return 0;

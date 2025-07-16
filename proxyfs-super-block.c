@@ -3,19 +3,20 @@
 // Created	:Wed Jul 16 00:11:45 2025
 #include "proxyfs.h"
 
-#include <linux/fs.h>
+//#include <linux/fs.h>
 #include <linux/namei.h>
-#include <linux/uaccess.h>
-#include <linux/pagemap.h>
-#include <linux/slab.h>
-#include <linux/mount.h>
-#include <linux/version.h>
-#include <linux/cred.h>
-#include <linux/kernel_read_file.h>
+//#include <linux/uaccess.h>
+//#include <linux/pagemap.h>
+//#include <linux/slab.h>
+//#include <linux/mount.h>
+//#include <linux/version.h>
+//#include <linux/cred.h>
+//#include <linux/kernel_read_file.h>
 
-int proxyfs_fill_super(struct super_block *sb,
-                       void *data,
-                       int silent) {
+int proxyfs_fill_super_block(struct super_block *sb,
+                             void *data,
+                             int silent)
+{
     struct super_block *lower_sb;
     struct inode *inode;
     struct inode *lower_inode;
@@ -40,6 +41,7 @@ int proxyfs_fill_super(struct super_block *sb,
 
     // Create root inode
     lower_inode = lower_root.dentry->d_inode;
+    // Note: `struct proxyfs_inode` is allocated by the call below
     inode = new_inode(sb);
     if (!inode) {
         return -ENOMEM;
@@ -47,7 +49,7 @@ int proxyfs_fill_super(struct super_block *sb,
     inode->i_ino = lower_inode->i_ino;
     inode->i_op = &proxyfs_dir_inode_ops;
     inode->i_fop = &proxyfs_file_ops;
-    ((struct proxyfs_inode_info *)inode)->lower_inode = lower_inode;
+    ((struct proxyfs_inode *)inode)->lower_inode = lower_inode;
     sb->s_root = d_make_root(inode);
     sb->s_root->d_op = &proxyfs_dentry_ops;
 

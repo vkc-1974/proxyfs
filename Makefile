@@ -2,15 +2,17 @@ obj-m := \
 	proxyfs.o
 
 proxyfs-objs := \
+	proxyfs-main.o \
+	proxyfs-buffer-pool.o \
+	proxyfs-context.o \
 	proxyfs-dentry-ops.o \
 	proxyfs-super-block.o \
 	proxyfs-super-ops.o \
 	proxyfs-dir-inode-ops.o \
 	proxyfs-file-ops.o \
-	proxyfs-main.o \
-	proxyfs_buffer_pool.o \
-	proxyfs_socket.o \
-	proxyfs_procfs.o
+	proxyfs-buffer-pool.o \
+	proxyfs-socket.o \
+	proxyfs-procfs.o
 
 ccflags-y += -g -Og
 

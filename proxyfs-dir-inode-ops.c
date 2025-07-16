@@ -17,11 +17,6 @@
 #include <linux/fiemap.h>
 #include <linux/fileattr.h>
 
-// Get lower inode from proxy inode
-static struct inode *proxyfs_lower_inode(const struct inode *inode) {
-    return ((struct proxyfs_inode_info *)inode)->lower_inode;
-}
-
 // lookup()
 static struct dentry *proxyfs_lookup(struct inode *dir,
                                      struct dentry *dentry,

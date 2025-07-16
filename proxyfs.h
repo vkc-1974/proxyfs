@@ -4,28 +4,29 @@
 #ifndef __PROXYFS_H__
 #define __PROXYFS_H__
 
+#include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/fs.h>
-#include <linux/pagemap.h>
-#include <linux/mount.h>
-#include <linux/init.h>
-#include <linux/slab.h>
-#include <linux/kernel.h>
-#include <linux/netlink.h>
-#include <net/sock.h>
-#include <linux/skbuff.h>
-#include <linux/version.h>
-#include <linux/uaccess.h>
-#include <linux/proc_fs.h>
-#include <linux/seq_file.h>
 #include <linux/spinlock.h>
-#include <linux/bitmap.h>
-#include <linux/slab.h>
+#include <linux/version.h>
 #include <linux/types.h>
 #include <linux/errno.h>
-#include <linux/namei.h>
-#include <linux/uaccess.h>
 #include <linux/printk.h>
+#include <net/sock.h>
+
+// #include <linux/pagemap.h>
+// #include <linux/mount.h>
+
+// #include <linux/netlink.h>
+// #include <linux/skbuff.h>
+// #include <linux/uaccess.h>
+// #include <linux/seq_file.h>
+// #include <linux/bitmap.h>
+// #include <linux/slab.h>
+// #include <linux/namei.h>
+// #include <linux/uaccess.h>
+
+#include "proxyfs-buffer-pool.h"
 
 #define PROXYFS_MAGIC 0x20250710
 #define MODULE_NAME   "proxyfs"
@@ -47,14 +48,6 @@ static inline const char *proxyfs_dentry_name(const struct dentry *dentry) {
 #define PROXYFS_INODE_DEBUG(dentry, fmt, ...) \
   pr_info("%s: %s: name=%s " fmt, MODULE_NAME, __func__, proxyfs_dentry_name(dentry), ##__VA_ARGS__)
 
-struct proxyfs_buffer_pool {
-    void **buffers;
-    unsigned long *bitmap;
-    unsigned int size;
-    unsigned int count;
-    spinlock_t lock;
-    atomic_t in_use;
-};
 
 struct proxyfs_context_data {
     //
@@ -77,18 +70,57 @@ struct proxyfs_context_data {
     atomic_t handler_counter;
 };
 
-struct proxyfs_inode_info {
+struct proxyfs_inode {
     struct inode vfs_inode;
     struct inode *lower_inode;
 };
+
+// Get inode of underlying FS from proxyfs inode
+inline static struct inode *proxyfs_lower_inode(const struct inode *inode)
+{
+    if (inode != NULL) {
+        return container_of(inode, struct proxyfs_inode, vfs_inode)->lower_inode;
+    }
+    return NULL;
+}
 
 struct proxyfs_file_info {
     struct file *lower_file;
 };
 
+// Get file of underlying FS from proxyfs file
+inline static struct file *proxyfs_lower_file(const struct file *file)
+{
+    if (file) {
+        return ((struct proxyfs_file_info *)file->private_data)->lower_file;
+    }
+    return NULL;
+}
+
 struct proxyfs_sb_info {
     struct super_block *lower_sb;
 };
+
+// Get super block of underlying FS from proxyfs super block
+inline static struct super_block *proxyfs_lower_sb(const struct super_block *sb)
+{
+    if (sb != NULL) {
+        return ((struct proxyfs_sb_info *)sb->s_fs_info)->lower_sb;
+    }
+    return NULL;
+}
+
+struct proxyfs_dentry_info {
+    struct dentry *lower_dentry;
+};
+
+inline static struct dentry *proxyfs_lower_dentry(struct dentry *dentry)
+{
+    if (dentry != NULL) {
+        return ((struct proxyfs_dentry_info *)dentry->d_fsdata)->lower_dentry;
+    }
+    return NULL;
+}
 
 //
 // Module context specific routines
@@ -102,11 +134,6 @@ struct sock* proxyfs_context_get_nl_socket(void);
 
 //
 // Buffer pool specific routines
-bool proxyfs_context_buffer_pool_init(struct proxyfs_buffer_pool *buffer_pool,
-                                      unsigned int count,
-                                      unsigned int size);
-void proxyfs_context_buffer_pool_destroy(struct proxyfs_buffer_pool* pool);
-int proxyfs_buffer_pool_in_use(struct proxyfs_buffer_pool* pool);
 void* proxyfs_context_buffer_pool_alloc(struct proxyfs_context_data *context_data);
 bool proxyfs_context_buffer_pool_free(struct proxyfs_context_data *context_data,
                                       void* buffer);
@@ -132,8 +159,8 @@ extern const struct dentry_operations proxyfs_dentry_ops;
 //
 // This routine is used to poupulate proxyfs super block,
 // see `struct proxyfs_sb_info` above
-int proxyfs_fill_super(struct super_block *sb,
-                       void *data,
-                       int silent);
+int proxyfs_fill_super_block(struct super_block *sb,
+                             void *data,
+                             int silent);
 
 #endif //  !__PROXYFS_H__

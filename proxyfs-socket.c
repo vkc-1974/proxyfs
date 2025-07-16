@@ -1,11 +1,13 @@
-// File		:proxyfs_socket.c
+// File		:proxyfs-socket.c
 // Author	:Victor Kovalevich
 // Created	:Fri Jul 11 13:07:00 2025
+#include <linux/netlink.h>
 #include "proxyfs.h"
 
 //
 // NETLINK receive message callback
-static void proxyfs_socket_recv_msg(struct sk_buff *sk_buffer) {
+static void proxyfs_socket_recv_msg(struct sk_buff *sk_buffer)
+{
     struct nlmsghdr* nl_header;
 
     ///// //
@@ -28,7 +30,8 @@ static void proxyfs_socket_recv_msg(struct sk_buff *sk_buffer) {
     }
 }
 
-struct sock* proxyfs_socket_init(const int nl_unit_id) {
+struct sock* proxyfs_socket_init(const int nl_unit_id)
+{
     struct netlink_kernel_cfg nl_cfg = {
         .input = proxyfs_socket_recv_msg,
         .flags = 0,
@@ -48,7 +51,8 @@ struct sock* proxyfs_socket_init(const int nl_unit_id) {
     return nl_socket;
 }
 
-void proxyfs_socket_release(struct sock* nl_socket) {
+void proxyfs_socket_release(struct sock* nl_socket)
+{
     if (nl_socket == NULL) {
         return;
     }
@@ -60,7 +64,8 @@ void proxyfs_socket_release(struct sock* nl_socket) {
 }
 
 // Sending of a message to the client (if it is registered)
-void proxyfs_socket_send_msg(const char* msg_body, size_t msg_len) {
+void proxyfs_socket_send_msg(const char* msg_body, size_t msg_len)
+{
     struct sk_buff* sk_buffer_out;
     struct nlmsghdr* nl_header;
     int res;

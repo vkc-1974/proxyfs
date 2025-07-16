@@ -1,11 +1,12 @@
-// File		:proxyfs_buffer_pool.c
+// File		:proxyfs-buffer-pool.c
 // Author	:Victor Kovalevich
 // Created	:Fri Jul 11 01:27:18 2025
 #include "proxyfs.h"
 
-bool proxyfs_context_buffer_pool_init(struct proxyfs_buffer_pool *buffer_pool,
-                                      unsigned int count,
-                                      unsigned int size) {
+bool proxyfs_buffer_pool_init(struct proxyfs_buffer_pool *buffer_pool,
+                              unsigned int count,
+                              unsigned int size)
+{
     if (buffer_pool == NULL || count == 0 || size == 0) {
         return false;
     }
@@ -66,7 +67,8 @@ bool proxyfs_context_buffer_pool_init(struct proxyfs_buffer_pool *buffer_pool,
     return false;
 }
 
-void proxyfs_context_buffer_pool_destroy(struct proxyfs_buffer_pool *buffer_pool) {
+void proxyfs_buffer_pool_destroy(struct proxyfs_buffer_pool *buffer_pool)
+{
     unsigned int i;
     if (!buffer_pool || !buffer_pool->buffers || !buffer_pool->bitmap) {
         return;
@@ -80,56 +82,6 @@ void proxyfs_context_buffer_pool_destroy(struct proxyfs_buffer_pool *buffer_pool
     buffer_pool->bitmap = NULL;
     buffer_pool->count = 0;
     buffer_pool->size = 0;
-}
-
-void* proxyfs_context_buffer_pool_alloc(struct proxyfs_context_data *context_data) {
-    if (context_data == NULL) {
-        return NULL;
-    }
-    unsigned long flags;
-    unsigned int i;
-    void *buffer = NULL;
-
-    spin_lock_irqsave(&context_data->buffer_pool.lock, flags);
-    if ((i = find_first_zero_bit(context_data->buffer_pool.bitmap,
-                                 context_data->buffer_pool.count)) < context_data->buffer_pool.count) {
-        set_bit(i, context_data->buffer_pool.bitmap);
-        buffer = context_data->buffer_pool.buffers[i];
-        atomic_inc(&context_data->buffer_pool.in_use);
-    }
-    spin_unlock_irqrestore(&context_data->buffer_pool.lock, flags);
-
-    return buffer;
-}
-
-bool proxyfs_context_buffer_pool_free(struct proxyfs_context_data *context_data,
-                                      void* buffer) {
-    if (context_data == NULL || buffer == NULL) {
-        return false;
-    }
-    unsigned long flags;
-    unsigned int i;
-    bool found = false;
-
-    spin_lock_irqsave(&context_data->buffer_pool.lock, flags);
-    for (i = 0; i < context_data->buffer_pool.count; i++) {
-        if (context_data->buffer_pool.buffers[i] == buffer) {
-            if (test_and_clear_bit(i, context_data->buffer_pool.bitmap)) {
-                atomic_dec(&context_data->buffer_pool.in_use);
-                found = true;
-            }
-            break;
-        }
-    }
-    spin_unlock_irqrestore(&context_data->buffer_pool.lock, flags);
-    return found;
-}
-
-unsigned int proxyfs_context_buffer_pool_get_buffer_size(struct proxyfs_context_data *context_data) {
-    if (context_data == NULL) {
-        return 0;
-    }
-    return context_data->buffer_pool.size;
 }
 
 int proxyfs_buffer_pool_in_use(struct proxyfs_buffer_pool* pool)

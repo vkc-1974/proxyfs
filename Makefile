@@ -8,7 +8,7 @@ proxyfs-objs := \
 	proxyfs-dentry-ops.o \
 	proxyfs-super-block.o \
 	proxyfs-super-ops.o \
-	proxyfs-dir-inode-ops.o \
+	proxyfs-inode-ops.o \
 	proxyfs-file-ops.o \
 	proxyfs-buffer-pool.o \
 	proxyfs-socket.o \

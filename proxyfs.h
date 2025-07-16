@@ -158,7 +158,7 @@ struct proc_dir_entry* proxyfs_procfs_setup(void);
 void proxyfs_procfs_release(void);
 
 extern const struct file_operations proxyfs_file_ops;
-extern const struct inode_operations proxyfs_dir_inode_ops;
+extern const struct inode_operations proxyfs_inode_ops;
 extern const struct super_operations proxyfs_super_ops;
 extern const struct dentry_operations proxyfs_dentry_ops;
 

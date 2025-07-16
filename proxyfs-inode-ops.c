@@ -1,4 +1,4 @@
-// File		:proxyfs-dir-inode-ops.c
+// File		:proxyfs-inode-ops.c
 // Author	:Victor Kovalevich
 // Created	:Tue Jul 15 00:39:51 2025
 #include "proxyfs.h"
@@ -335,7 +335,7 @@ static struct offset_ctx *proxyfs_get_offset_ctx(struct inode *inode) {
 }
 
 // dir_inode_operations
-const struct inode_operations proxyfs_dir_inode_ops = {
+const struct inode_operations proxyfs_inode_ops = {
     // struct dentry * (*lookup) (struct inode *,struct dentry *, unsigned int);
     .lookup = proxyfs_lookup,
     // const char * (*get_link) (struct dentry *, struct inode *, struct delayed_call *);

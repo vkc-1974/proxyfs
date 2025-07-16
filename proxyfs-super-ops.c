@@ -1,11 +1,11 @@
 // File		:proxyfs-super-ops.c
 // Author	:Victor Kovalevich
 // Created	:Tue Jul 15 03:00:42 2025
-#include "proxyfs.h"
 #include <linux/fs.h>
 #include <linux/seq_file.h>
 #include <linux/quota.h>
 #include <linux/writeback.h>
+#include "proxyfs.h"
 
 // alloc_inode()
 static struct inode *proxyfs_alloc_inode(struct super_block *sb)

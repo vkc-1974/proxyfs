@@ -1,17 +1,8 @@
 // File		:proxyfs-super-block.c
 // Author	:Victor Kovalevich
 // Created	:Wed Jul 16 00:11:45 2025
-#include "proxyfs.h"
-
-//#include <linux/fs.h>
 #include <linux/namei.h>
-//#include <linux/uaccess.h>
-//#include <linux/pagemap.h>
-//#include <linux/slab.h>
-//#include <linux/mount.h>
-//#include <linux/version.h>
-//#include <linux/cred.h>
-//#include <linux/kernel_read_file.h>
+#include "proxyfs.h"
 
 int proxyfs_fill_super_block(struct super_block *sb,
                              void *data,

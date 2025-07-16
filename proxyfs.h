@@ -16,14 +16,11 @@
 
 // #include <linux/pagemap.h>
 // #include <linux/mount.h>
-
-// #include <linux/netlink.h>
 // #include <linux/skbuff.h>
 // #include <linux/uaccess.h>
 // #include <linux/seq_file.h>
 // #include <linux/bitmap.h>
 // #include <linux/slab.h>
-// #include <linux/namei.h>
 // #include <linux/uaccess.h>
 
 #include "proxyfs-buffer-pool.h"
@@ -112,12 +109,21 @@ inline static struct super_block *proxyfs_lower_sb(const struct super_block *sb)
 
 struct proxyfs_dentry_info {
     struct dentry *lower_dentry;
+    struct vfsmount *lower_mnt;
 };
 
 inline static struct dentry *proxyfs_lower_dentry(struct dentry *dentry)
 {
     if (dentry != NULL) {
         return ((struct proxyfs_dentry_info *)dentry->d_fsdata)->lower_dentry;
+    }
+    return NULL;
+}
+
+inline static struct vfsmount *proxyfs_lower_mnt(struct dentry *dentry)
+{
+    if (dentry != NULL) {
+        return ((struct proxyfs_dentry_info *)dentry->d_fsdata)->lower_mnt;
     }
     return NULL;
 }

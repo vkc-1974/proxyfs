@@ -133,12 +133,14 @@ static int proxyfs_write_end(struct file *file,
 static sector_t proxyfs_bmap(struct address_space *mapping,
                              sector_t block)
 {
-    /*
-    struct address_space *lower_mapping = proxyfs_lower_mapping(mapping);
-    if (lower_mapping && lower_mapping->a_ops && lower_mapping->a_ops->bmap) {
-        return lower_mapping->a_ops->bmap(lower_mapping, block);
+    if (mapping) {
+        struct inode *inode = mapping->host;
+        struct inode *lower_inode = proxyfs_lower_inode(inode);
+        struct address_space *lower_mapping = lower_inode ? lower_inode->i_mapping : NULL;
+        if (lower_mapping && lower_mapping->a_ops && lower_mapping->a_ops->bmap) {
+            return lower_mapping->a_ops->bmap(lower_mapping, block);
+        }
     }
-    */
     return 0;
 }
 
@@ -267,7 +269,7 @@ const struct address_space_operations proxyfs_mapping_ops = {
 	// int (*write_end)(struct file *, struct address_space *mapping, loff_t pos, unsigned len, unsigned copied, struct folio *folio, void *fsdata);
     .write_end = proxyfs_write_end,
 	// sector_t (*bmap)(struct address_space *, sector_t);
-    .bmap = NULL,
+    .bmap = proxyfs_bmap,
 	// void (*invalidate_folio) (struct folio *, size_t offset, size_t len);
     .invalidate_folio = NULL,
 	// bool (*release_folio)(struct folio *, gfp_t);

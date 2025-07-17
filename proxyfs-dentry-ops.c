@@ -8,22 +8,22 @@
 
 // d_revalidate()
 static int proxyfs_revalidate(struct inode *inode,
-                              const struct qstr *qstr,
+                              const struct qstr *name,
                               struct dentry *dentry,
                               unsigned int flags)
 {
-    PROXYFS_DEBUG("inode=%pd, qstr=%pd, dentry=%pd, flags=0x%x\n",
-                  inode,
-                  qstr,
+    // 1 = valid, 0 = invalid dentry, <0 - error
+    int ret = -ENOSYS;
+    PROXYFS_DEBUG("inode=" INODE_FMT ", name=" QSTR_FMT ", dentry=%pd, flags=0x%x\n",
+                  INODE_ARG(inode),
+                  QSTR_ARG(name),
                   dentry,
                   flags);
-    // 1 = valid, 0 = invalid dentry
-    int ret = 0;
     struct inode *lower_inode = proxyfs_lower_inode(inode);
     struct dentry *lower_dentry = proxyfs_lower_dentry(dentry);
     const struct dentry_operations *lower_ops = lower_dentry ? lower_dentry->d_op : NULL;
     if (lower_ops && lower_ops->d_revalidate) {
-        ret = lower_ops->d_revalidate(lower_inode, qstr, lower_dentry, flags);
+        ret = lower_ops->d_revalidate(lower_inode, name, lower_dentry, flags);
     }
     return ret;
 }
@@ -32,9 +32,11 @@ static int proxyfs_revalidate(struct inode *inode,
 static int proxyfs_weak_revalidate(struct dentry *dentry,
                                    unsigned int flags)
 {
-    PROXYFS_DEBUG("name=%s, flags=0x%x\n", proxyfs_dentry_name(dentry), flags);
-    // 1 = valid, 0 = invalid dentry
-    int ret = 0;
+    // 1 = valid, 0 = invalid dentry, <0 - error
+    int ret = -ENOSYS;
+    PROXYFS_DEBUG("dentry=%pd, flags=0x%x\n",
+                  dentry,
+                  flags);
     struct dentry *lower_dentry = proxyfs_lower_dentry(dentry);
     const struct dentry_operations *lower_ops = lower_dentry ? lower_dentry->d_op : NULL;
     if (lower_ops && lower_ops->d_weak_revalidate) {
@@ -45,14 +47,16 @@ static int proxyfs_weak_revalidate(struct dentry *dentry,
 
 // d_hash()
 static int proxyfs_hash(const struct dentry *dentry,
-                        struct qstr *qstr)
+                        struct qstr *name)
 {
-    PROXYFS_DEBUG("name=%s, qstr=0x%pd\n", proxyfs_dentry_name(dentry), qstr);
-    int ret = 0;
+    int ret = -ENOSYS;
+    PROXYFS_DEBUG("dentry=%pd, name=" QSTR_FMT "\n",
+                  dentry,
+                  QSTR_ARG(name));
     const struct dentry *lower_dentry = proxyfs_lower_dentry((struct dentry *)dentry);
     const struct dentry_operations *lower_ops = lower_dentry ? lower_dentry->d_op : NULL;
     if (lower_ops && lower_ops->d_hash) {
-        ret = lower_ops->d_hash(lower_dentry, qstr);
+        ret = lower_ops->d_hash(lower_dentry, name);
     }
     return ret;
 }
@@ -63,8 +67,12 @@ static int proxyfs_compare(const struct dentry *dentry,
                            const char *str,
                            const struct qstr *qstr)
 {
-    PROXYFS_DEBUG("name=%s, flags=0x%x, str=%s, qstr=0x%pd\n", proxyfs_dentry_name(dentry), flags, str, qstr);
-    int ret = 0;
+    int ret = -ENOSYS;
+    PROXYFS_DEBUG("dentry=%pd, flags=0x%x, str=%s, qstr=" QSTR_FMT "\n",
+                  dentry,
+                  flags,
+                  str,
+                  QSTR_ARG(qstr));
     const struct dentry *lower_dentry = proxyfs_lower_dentry((struct dentry *)dentry);
     const struct dentry_operations *lower_ops = lower_dentry ? lower_dentry->d_op : NULL;
     if (lower_ops && lower_ops->d_compare) {
@@ -76,7 +84,7 @@ static int proxyfs_compare(const struct dentry *dentry,
 // d_delete()
 static int proxyfs_delete(const struct dentry *dentry)
 {
-    PROXYFS_DEBUG("name=%s\n", proxyfs_dentry_name(dentry));
+    PROXYFS_DEBUG("dentry=%pd\n", dentry);
     struct dentry *lower_dentry = proxyfs_lower_dentry((struct dentry *)dentry);
     const struct dentry_operations *lower_ops = lower_dentry ? lower_dentry->d_op : NULL;
     if (lower_ops && lower_ops->d_delete) {
@@ -93,9 +101,7 @@ static int proxyfs_init(struct dentry *dentry)
     struct dentry *lower_parent = NULL;
     struct dentry *lower_dentry = NULL;
     struct vfsmount *lower_mnt = NULL;
-
     PROXYFS_DEBUG("dentry=%pd\n", dentry);
-
     if (dentry->d_parent && dentry->d_parent->d_fsdata) {
         parent_info = (struct proxyfs_dentry_info *)dentry->d_parent->d_fsdata;
         lower_parent = parent_info->lower_dentry;
@@ -119,8 +125,8 @@ static int proxyfs_init(struct dentry *dentry)
 // d_release()
 static void proxyfs_release(struct dentry *dentry)
 {
-    PROXYFS_DEBUG("name=%s\n", proxyfs_dentry_name(dentry));
-    struct proxyfs_dentry_info *info = dentry->d_fsdata;
+    PROXYFS_DEBUG("dentry=%pd\n", dentry);
+    struct proxyfs_dentry_info *info = (struct proxyfs_dentry_info *)dentry->d_fsdata;
     if (info) {
         if (info->lower_dentry != NULL) {
             dput(info->lower_dentry);
@@ -140,7 +146,7 @@ static void proxyfs_release(struct dentry *dentry)
 // d_prune()
 static void proxyfs_prune(struct dentry *dentry)
 {
-    PROXYFS_DEBUG("name=%s\n", proxyfs_dentry_name(dentry));
+    PROXYFS_DEBUG("dentry=%pd\n", dentry);
     struct proxyfs_dentry_info *info = (struct proxyfs_dentry_info *)dentry->d_fsdata;
     if (info != NULL) {
         if (info->lower_dentry != NULL) {
@@ -158,7 +164,9 @@ static void proxyfs_iput(struct dentry *dentry, struct inode *inode)
     //
     // Note: this routine is intended to decrease reference counter just
     //       of inode instance involved
-    PROXYFS_DEBUG("name=%s, inode=%pd\n", proxyfs_dentry_name(dentry), inode);
+    PROXYFS_DEBUG("dentry=%pd, inode=" INODE_FMT "\n",
+                  dentry,
+                  INODE_ARG(inode));
     struct inode *lower_inode = proxyfs_lower_inode(inode);
     if (lower_inode) {
         iput(lower_inode);
@@ -170,7 +178,7 @@ static char *proxyfs_dname(struct dentry *dentry,
                            char *buffer,
                            int buffer_len)
 {
-    PROXYFS_DEBUG("name=%s\n", proxyfs_dentry_name(dentry));
+    PROXYFS_DEBUG("dentry=%pd\n", dentry);
     struct dentry *lower_dentry = proxyfs_lower_dentry(dentry);
     const struct dentry_operations *lower_ops = lower_dentry ? lower_dentry->d_op : NULL;
     if (lower_ops && lower_ops->d_dname) {
@@ -184,7 +192,7 @@ static char *proxyfs_dname(struct dentry *dentry,
 static struct vfsmount *proxyfs_automount(struct path *path)
 {
     struct vfsmount *lower_mnt = NULL;
-    PROXYFS_DEBUG("path=%pd\n", path);
+    PROXYFS_DEBUG("path=%pd\n", (path ? path->dentry : NULL));
     if (path == NULL) {
         return lower_mnt;
     }
@@ -206,7 +214,9 @@ static struct vfsmount *proxyfs_automount(struct path *path)
 // d_manage()
 static int proxyfs_manage(const struct path *path, bool do_invalidate)
 {
-    PROXYFS_DEBUG("path=%pd, do_invalidate=%s\n", path, (do_invalidate ? "true" : "false"));
+    PROXYFS_DEBUG("path=%pd, do_invalidate=%s\n",
+                  (path ? path->dentry : NULL),
+                  (do_invalidate ? "true" : "false"));
     if (path == NULL || path->dentry == NULL) {
         return -EINVAL;
     }
@@ -227,9 +237,10 @@ static int proxyfs_manage(const struct path *path, bool do_invalidate)
 }
 
 // d_real()
-static struct dentry *proxyfs_real(struct dentry *dentry, enum d_real_type type)
+static struct dentry *proxyfs_real(struct dentry *dentry,
+                                   enum d_real_type type)
 {
-    PROXYFS_DEBUG("name=%s type=%d\n", proxyfs_dentry_name(dentry), type);
+    PROXYFS_DEBUG("dentry=%pd, type=%d\n", dentry, type);
     struct dentry *lower_dentry = proxyfs_lower_dentry(dentry);
     if (lower_dentry != NULL) {
         const struct dentry_operations *lower_ops = lower_dentry ? lower_dentry->d_op : NULL;
@@ -243,7 +254,7 @@ static struct dentry *proxyfs_real(struct dentry *dentry, enum d_real_type type)
 // d_unalias_trylock()
 static bool proxyfs_unalias_trylock(const struct dentry *dentry)
 {
-    PROXYFS_DEBUG("name=%s\n", proxyfs_dentry_name(dentry));
+    PROXYFS_DEBUG("dentry=%pd\n", dentry);
     struct dentry *lower_dentry = proxyfs_lower_dentry((struct dentry *)dentry);
     if (lower_dentry != NULL) {
         const struct dentry_operations *lower_ops = lower_dentry ? lower_dentry->d_op : NULL;
@@ -257,7 +268,7 @@ static bool proxyfs_unalias_trylock(const struct dentry *dentry)
 // d_unalias_unlock()
 static void proxyfs_unalias_unlock(const struct dentry *dentry)
 {
-    PROXYFS_DEBUG("name=%s\n", proxyfs_dentry_name(dentry));
+    PROXYFS_DEBUG("dentry=%pd\n", dentry);
     struct dentry *lower_dentry = proxyfs_lower_dentry((struct dentry *)dentry);
     if (lower_dentry != NULL) {
         const struct dentry_operations *lower_ops = lower_dentry ? lower_dentry->d_op : NULL;

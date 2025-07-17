@@ -12,6 +12,7 @@
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/printk.h>
+#include <linux/dcache.h>
 #include <net/sock.h>
 
 // #include <linux/pagemap.h>
@@ -35,16 +36,18 @@
 
 #define PROXYFS_NETLINK_USER    25
 
+#define QSTR_FMT "%.*s"
+#define QSTR_ARG(s) ((s) ? (s)->len : 0), ((s) ? (char *)(s)->name : "")
+
+#define INODE_FMT "%lu"
+#define INODE_ARG(i) ((i) ? (i)->i_ino : 0)
+
 #define PROXYFS_DEBUG(fmt, ...) \
   pr_info("%s: %s: " fmt, MODULE_NAME, __func__, ##__VA_ARGS__)
 
 static inline const char *proxyfs_dentry_name(const struct dentry *dentry) {
     return dentry ? (const char*)dentry->d_name.name : "?";
 }
-
-#define PROXYFS_INODE_DEBUG(dentry, fmt, ...) \
-  pr_info("%s: %s: name=%s " fmt, MODULE_NAME, __func__, proxyfs_dentry_name(dentry), ##__VA_ARGS__)
-
 
 struct proxyfs_context_data {
     //

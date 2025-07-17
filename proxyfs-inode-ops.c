@@ -22,20 +22,19 @@ static struct dentry *proxyfs_lookup(struct inode *dir,
                                      struct dentry *dentry,
                                      unsigned int flags)
 {
-    PROXYFS_INODE_DEBUG(dentry, "\n");
-
+    PROXYFS_DEBUG("dir=" INODE_FMT ", dentry=%pd, flags=%ul\n",
+                  INODE_ARG(dir),
+                  dentry,
+                  flags);
     struct dentry *ret = NULL;
     struct dentry *new_lower_dentry = NULL;
-
     do {
         if (dir == NULL || dentry == NULL) {
             ret = ERR_PTR(-EINVAL);
             break;
         }
-
         struct dentry *lower_parent = proxyfs_lower_dentry(dentry->d_parent);
         struct dentry *lower_dentry = d_lookup(lower_parent, &dentry->d_name);
-
         if (!lower_dentry) {
             if ((lower_dentry = d_alloc(lower_parent, &dentry->d_name)) == NULL) {
                 ret = ERR_PTR(-ENOMEM);
@@ -43,7 +42,6 @@ static struct dentry *proxyfs_lookup(struct inode *dir,
             }
             new_lower_dentry = lower_dentry;
         }
-
         struct inode *lower_dir = proxyfs_lower_inode(dir);
         if (lower_dir->i_op && lower_dir->i_op->lookup) {
             struct dentry *res = lower_dir->i_op->lookup(lower_dir, lower_dentry, flags);
@@ -52,10 +50,8 @@ static struct dentry *proxyfs_lookup(struct inode *dir,
                 break;
             }
         }
-
         struct inode *lower_inode = lower_dentry->d_inode;
         struct inode *inode = NULL;
-
         if (lower_inode) {
             inode = new_inode(dentry->d_sb);
             // Fill proxyfs inode with the attributes from lower_inode
@@ -68,35 +64,39 @@ static struct dentry *proxyfs_lookup(struct inode *dir,
 
         ret = NULL;
     } while (false);
-
-
     if (IS_ERR(ret)) {
         if (new_lower_dentry) {
             dput(new_lower_dentry);
         }
     }
-
     return ret;
 }
 
 // get_link()
 static const char *proxyfs_get_link(struct dentry *dentry,
                                     struct inode *inode,
-                                    struct delayed_call *done) {
-    PROXYFS_DEBUG("name=%s\n", proxyfs_dentry_name(dentry));
+                                    struct delayed_call *done)
+{
+    PROXYFS_DEBUG("dentry=%pd, inode=" INODE_FMT ", done=%p\n",
+                  dentry,
+                  INODE_ARG(inode),
+                  done);
+    struct dentry *lower_dentry = proxyfs_lower_dentry(dentry);
     struct inode *lower_inode = proxyfs_lower_inode(inode);
     if (lower_inode->i_op && lower_inode->i_op->get_link) {
-        return lower_inode->i_op->get_link(dentry, lower_inode, done);
+        return lower_inode->i_op->get_link(lower_dentry, lower_inode, done);
     }
-    return ERR_PTR(-EOPNOTSUPP);
+    return ERR_PTR(-ENOSYS);
 }
 
 // permission()
-static int proxyfs_permission(struct mnt_idmap *idmap, struct inode *inode, int mask)
+static int proxyfs_permission(struct mnt_idmap *idmap,
+                              struct inode *inode,
+                              int mask)
 {
-    ///// struct dentry *dentry = NULL; // Не всегда есть dentry, можно вывести только inode
-    /*pr_info("%s: %s: inode=%lu mask=0x%x\n", MODULE_NAME, __func__, inode->i_ino, mask);*/
-    PROXYFS_DEBUG("inode=%lu, mask=0x%x\n", inode->i_ino, mask);
+    PROXYFS_DEBUG("inode=" INODE_FMT ", mask=0x%x\n",
+                  INODE_ARG(inode),
+                  mask);
     struct inode *lower_inode = proxyfs_lower_inode(inode);
     if (lower_inode->i_op && lower_inode->i_op->permission) {
         return lower_inode->i_op->permission(idmap, lower_inode, mask);
@@ -107,33 +107,48 @@ static int proxyfs_permission(struct mnt_idmap *idmap, struct inode *inode, int 
 // get_inode_acl()
 static struct posix_acl *proxyfs_get_inode_acl(struct inode *inode,
                                                int type,
-                                               bool rcu) {
-    PROXYFS_DEBUG("inode=%lu, type=%d, rcu=%d\n", inode->i_ino, type, rcu);
+                                               bool rcu)
+{
+    PROXYFS_DEBUG("inode=" INODE_FMT ", type=%d, rcu=%d\n",
+                  INODE_ARG(inode),
+                  type,
+                  rcu);
     struct inode *lower_inode = proxyfs_lower_inode(inode);
     if (lower_inode->i_op && lower_inode->i_op->get_inode_acl) {
         return lower_inode->i_op->get_inode_acl(lower_inode, type, rcu);
     }
-    return ERR_PTR(-EOPNOTSUPP);
+    return ERR_PTR(-ENOSYS);
 }
 
 // readlink()
 static int proxyfs_readlink(struct dentry *dentry,
                             char __user *buffer,
-                            int buflen) {
-    PROXYFS_DEBUG("name=%s, buflen=%d\n", dentry->d_name.name, buflen);
+                            int buffer_len)
+{
+    PROXYFS_DEBUG("dentry=%pd, buffer=%p, buffer_len=%d\n",
+                  dentry,
+                  buffer,
+                  buffer_len);
     struct inode *lower_inode = proxyfs_lower_inode(d_inode(dentry));
     if (lower_inode->i_op && lower_inode->i_op->readlink) {
-        return lower_inode->i_op->readlink(dentry, buffer, buflen);
+        return lower_inode->i_op->readlink(dentry, buffer, buffer_len);
     }
-    return -EOPNOTSUPP;
+    return -ENOSYS;
 }
+
 // create()
 static int proxyfs_create(struct mnt_idmap *idmap,
                           struct inode *dir,
                           struct dentry *dentry,
-                          umode_t mode, bool excl)
+                          umode_t mode,
+                          bool excl)
 {
-    PROXYFS_INODE_DEBUG(dentry, "\n");
+    PROXYFS_DEBUG("idmap=%p, dir=" INODE_FMT ", dentry=%pd, mode=0%o, excl=%s\n",
+                  idmap,
+                  INODE_ARG(dir),
+                  dentry,
+                  mode,
+                  (excl ? "true" : "false"));
     struct inode *lower_inode = proxyfs_lower_inode(dir);
     if (lower_inode->i_op && lower_inode->i_op->create) {
         return lower_inode->i_op->create(idmap, lower_inode, dentry, mode, excl);
@@ -146,11 +161,15 @@ static int proxyfs_link(struct dentry *old_dentry,
                         struct inode *dir,
                         struct dentry *dentry)
 {
-    PROXYFS_INODE_DEBUG(dentry, "\n");
+    PROXYFS_DEBUG("old_dentry=%pd, dir=" INODE_FMT ", dentry=%pd\n",
+                  old_dentry,
+                  INODE_ARG(dir),
+                  dentry);
+    struct dentry *lower_old_dentry = proxyfs_lower_dentry(old_dentry);
     struct inode *lower_dir = proxyfs_lower_inode(dir);
-    ///// struct inode *lower_inode = proxyfs_lower_inode(d_inode(old_dentry));
+    struct dentry *lower_dentry = proxyfs_lower_dentry(dentry);
     if (lower_dir->i_op && lower_dir->i_op->link) {
-        return lower_dir->i_op->link(old_dentry, lower_dir, dentry);
+        return lower_dir->i_op->link(lower_old_dentry, lower_dir, lower_dentry);
     }
     return -ENOSYS;
 }
@@ -159,10 +178,13 @@ static int proxyfs_link(struct dentry *old_dentry,
 static int proxyfs_unlink(struct inode *dir,
                           struct dentry *dentry)
 {
-    PROXYFS_INODE_DEBUG(dentry, "\n");
+    PROXYFS_DEBUG("inode=" INODE_FMT ", dentry=%pd\n",
+                  INODE_ARG(dir),
+                  dentry);
     struct inode *lower_inode = proxyfs_lower_inode(dir);
+    struct dentry *lower_dentry = proxyfs_lower_dentry(dentry);
     if (lower_inode->i_op && lower_inode->i_op->unlink) {
-        return lower_inode->i_op->unlink(lower_inode, dentry);
+        return lower_inode->i_op->unlink(lower_inode, lower_dentry);
     }
     return -ENOSYS;
 }
@@ -173,10 +195,15 @@ static int proxyfs_symlink(struct mnt_idmap *idmap,
                            struct dentry *dentry,
                            const char *symname)
 {
-    PROXYFS_INODE_DEBUG(dentry, "\n");
+    PROXYFS_DEBUG("idmap=%p, dir=" INODE_FMT ", dentry=%pd, symname=%s\n",
+                  idmap,
+                  INODE_ARG(dir),
+                  dentry,
+                  symname);
     struct inode *lower_inode = proxyfs_lower_inode(dir);
+    struct dentry *lower_dentry = proxyfs_lower_dentry(dentry);
     if (lower_inode->i_op && lower_inode->i_op->symlink) {
-        return lower_inode->i_op->symlink(idmap, lower_inode, dentry, symname);
+        return lower_inode->i_op->symlink(idmap, lower_inode, lower_dentry, symname);
     }
     return -ENOSYS;
 }
@@ -187,10 +214,15 @@ static struct dentry *proxyfs_mkdir(struct mnt_idmap *idmap,
                                     struct dentry *dentry,
                                     umode_t mode)
 {
-    PROXYFS_INODE_DEBUG(dentry, "\n");
+    PROXYFS_DEBUG("idmap=%p, dir=" INODE_FMT ", dentry=%pd, mode=0%o\n",
+                  idmap,
+                  INODE_ARG(dir),
+                  dentry,
+                  mode);
     struct inode *lower_inode = proxyfs_lower_inode(dir);
+    struct dentry *lower_dentry = proxyfs_lower_dentry(dentry);
     if (lower_inode->i_op && lower_inode->i_op->mkdir) {
-        return lower_inode->i_op->mkdir(idmap, lower_inode, dentry, mode);
+        return lower_inode->i_op->mkdir(idmap, lower_inode, lower_dentry, mode);
     }
     return ERR_PTR(-ENOSYS);
 }
@@ -199,10 +231,13 @@ static struct dentry *proxyfs_mkdir(struct mnt_idmap *idmap,
 static int proxyfs_rmdir(struct inode *dir,
                          struct dentry *dentry)
 {
-    PROXYFS_INODE_DEBUG(dentry, "\n");
+    PROXYFS_DEBUG("dir=" INODE_FMT ", dentry=%pd\n",
+                  INODE_ARG(dir),
+                  dentry);
     struct inode *lower_inode = proxyfs_lower_inode(dir);
+    struct dentry *lower_dentry = proxyfs_lower_dentry(dentry);
     if (lower_inode->i_op && lower_inode->i_op->rmdir) {
-        return lower_inode->i_op->rmdir(lower_inode, dentry);
+        return lower_inode->i_op->rmdir(lower_inode, lower_dentry);
     }
     return -ENOSYS;
 }
@@ -214,10 +249,16 @@ static int proxyfs_mknod(struct mnt_idmap *idmap,
                          umode_t mode,
                          dev_t dev)
 {
-    PROXYFS_INODE_DEBUG(dentry, "\n");
+    PROXYFS_DEBUG("idmap=%p, dir=" INODE_FMT ", dentry=%pd, mode=0%o, dev=%ul\n",
+                  idmap,
+                  INODE_ARG(dir),
+                  dentry,
+                  mode,
+                  dev);
     struct inode *lower_inode = proxyfs_lower_inode(dir);
+    struct dentry *lower_dentry = proxyfs_lower_dentry(dentry);
     if (lower_inode->i_op && lower_inode->i_op->mknod) {
-        return lower_inode->i_op->mknod(idmap, lower_inode, dentry, mode, dev);
+        return lower_inode->i_op->mknod(idmap, lower_inode, lower_dentry, mode, dev);
     }
     return -ENOSYS;
 }
@@ -230,11 +271,19 @@ static int proxyfs_rename(struct mnt_idmap *idmap,
                           struct dentry *new_dentry,
                           unsigned int flags)
 {
-    PROXYFS_INODE_DEBUG(old_dentry, "rename to %s\n", new_dentry->d_name.name);
-    struct inode *lower_old = proxyfs_lower_inode(old_dir);
-    struct inode *lower_new = proxyfs_lower_inode(new_dir);
-    if (lower_old->i_op && lower_old->i_op->rename) {
-        return lower_old->i_op->rename(idmap, lower_old, old_dentry, lower_new, new_dentry, flags);
+    PROXYFS_DEBUG("idmap=%p, old_dir=" INODE_FMT ", old_dentry=%pd, new_dir=" INODE_FMT ", new_dentry=%pd, flags=0x%x\n",
+                  idmap,
+                  INODE_ARG(old_dir),
+                  old_dentry,
+                  INODE_ARG(new_dir),
+                  new_dentry,
+                  flags);
+    struct inode *lower_old_dir = proxyfs_lower_inode(old_dir);
+    struct dentry *lower_old_dentry = proxyfs_lower_dentry(old_dentry);
+    struct inode *lower_new_dir = proxyfs_lower_inode(new_dir);
+    struct dentry *lower_new_dentry = proxyfs_lower_dentry(new_dentry);
+    if (lower_old_dir->i_op && lower_old_dir->i_op->rename) {
+        return lower_old_dir->i_op->rename(idmap, lower_old_dir, lower_old_dentry, lower_new_dir, lower_new_dentry, flags);
     }
     return -ENOSYS;
 }
@@ -244,10 +293,14 @@ static int proxyfs_setattr(struct mnt_idmap *idmap,
                            struct dentry *dentry,
                            struct iattr *attr)
 {
-    PROXYFS_INODE_DEBUG(dentry, "setattr\n");
-    struct inode *lower_inode = proxyfs_lower_inode(d_inode(dentry));
+    PROXYFS_DEBUG("idmap=%p, dentry=%pd, attr=%p\n",
+                  idmap,
+                  dentry,
+                  attr);
+    struct dentry *lower_dentry = proxyfs_lower_dentry(dentry);
+    struct inode *lower_inode = d_inode(lower_dentry);
     if (lower_inode->i_op && lower_inode->i_op->setattr) {
-        return lower_inode->i_op->setattr(idmap, dentry, attr);
+        return lower_inode->i_op->setattr(idmap, lower_dentry, attr);
     }
     return -ENOSYS;
 }
@@ -259,7 +312,12 @@ static int proxyfs_getattr(struct mnt_idmap *idmap,
                            u32 request_mask,
                            unsigned int flags)
 {
-    PROXYFS_INODE_DEBUG(path->dentry, "getattr\n");
+    PROXYFS_DEBUG("idmap=%p, path=%p, stat=%p, request_mask=0x%x, flags=0x%x\n",
+                  idmap,
+                  path,
+                  stat,
+                  request_mask,
+                  flags);
     struct inode *lower_inode = proxyfs_lower_inode(d_inode(path->dentry));
     if (lower_inode->i_op && lower_inode->i_op->getattr) {
         return lower_inode->i_op->getattr(idmap, path, stat, request_mask, flags);
@@ -270,27 +328,43 @@ static int proxyfs_getattr(struct mnt_idmap *idmap,
 // listxattr()
 static ssize_t proxyfs_listxattr(struct dentry *dentry,
                                  char *buffer,
-                                 size_t size) {
-    PROXYFS_DEBUG("name=%s, size=%zu\n", dentry->d_name.name, size);
+                                 size_t buffer_len)
+{
+    PROXYFS_DEBUG("dentry=%pd, buffer=%p, size=%zu\n",
+                  dentry,
+                  buffer,
+                  buffer_len);
+    struct dentry *lower_dentry = proxyfs_lower_dentry(dentry);
     struct inode *lower_inode = proxyfs_lower_inode(d_inode(dentry));
     if (lower_inode->i_op && lower_inode->i_op->listxattr) {
-        return lower_inode->i_op->listxattr(dentry, buffer, size);
+        return lower_inode->i_op->listxattr(lower_dentry, buffer, buffer_len);
     }
-    return -EOPNOTSUPP;
+    return -ENOSYS;
 }
 
 // fiemap()
-static int proxyfs_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo, u64 start, u64 len) {
-    PROXYFS_DEBUG("inode=%lu, fiemap start=%llu len=%llu\n", inode->i_ino, start, len);
+static int proxyfs_fiemap(struct inode *inode,
+                          struct fiemap_extent_info *fieinfo,
+                          u64 start,
+                          u64 len)
+{
+    PROXYFS_DEBUG("inode=" INODE_FMT ", fileinfo=%p, start=%llu, len=%llu\n",
+                  INODE_ARG(inode),
+                  fieinfo,
+                  start,
+                  len);
     struct inode *lower_inode = proxyfs_lower_inode(inode);
-    if (lower_inode->i_op && lower_inode->i_op->fiemap)
+    if (lower_inode->i_op && lower_inode->i_op->fiemap) {
         return lower_inode->i_op->fiemap(lower_inode, fieinfo, start, len);
-    return -EOPNOTSUPP;
+    }
+    return -ENOSYS;
 }
 
 static int proxyfs_update_time(struct inode *inode, int flags)
 {
-    PROXYFS_DEBUG("inode=%lu, flags=0x%x\n", inode->i_ino, flags);
+    PROXYFS_DEBUG("inode=" INODE_FMT ", flags=0x%x\n",
+                  INODE_ARG(inode),
+                  flags);
     struct inode *lower_inode = proxyfs_lower_inode(inode);
     if (lower_inode->i_op && lower_inode->i_op->update_time) {
         return lower_inode->i_op->update_time(lower_inode, flags);
@@ -303,79 +377,115 @@ static int proxyfs_atomic_open(struct inode *dir,
                                struct dentry *dentry,
                                struct file *file,
                                unsigned open_flag,
-                               umode_t create_mode) {
-    PROXYFS_DEBUG("name=%s, open_flag=0x%x, create_mode=0%o\n", dentry->d_name.name, open_flag, create_mode);
+                               umode_t create_mode)
+{
+    PROXYFS_DEBUG("inode=" INODE_FMT ", dentry=%pd, file=%p, open_flag=0x%x, create_mode=0%o\n",
+                  INODE_ARG(dir),
+                  dentry,
+                  file,
+                  open_flag,
+                  create_mode);
     struct inode *lower_inode = proxyfs_lower_inode(dir);
+    struct dentry *lower_dentry = proxyfs_lower_dentry(dentry);
+    struct file *lower_file = proxyfs_lower_file(file);
     if (lower_inode->i_op && lower_inode->i_op->atomic_open) {
-        return lower_inode->i_op->atomic_open(lower_inode, dentry, file, open_flag, create_mode);
+        return lower_inode->i_op->atomic_open(lower_inode, lower_dentry, lower_file, open_flag, create_mode);
     }
-    return -EOPNOTSUPP;
+    return -ENOSYS;
 }
 
 // tmpfile()
 static int proxyfs_tmpfile(struct mnt_idmap *idmap,
                            struct inode *dir,
                            struct file *file,
-                           umode_t mode) {
-    PROXYFS_DEBUG("inode=%lu, mode=0%o\n", dir->i_ino, mode);
+                           umode_t mode)
+{
+    PROXYFS_DEBUG("idmap=%p, inode=" INODE_FMT ", file=%p, mode=0%o\n",
+                  idmap,
+                  INODE_ARG(dir),
+                  file,
+                  mode);
+    struct file *lower_file = proxyfs_lower_file(file);
     struct inode *lower_inode = proxyfs_lower_inode(dir);
     if (lower_inode->i_op && lower_inode->i_op->tmpfile) {
-        return lower_inode->i_op->tmpfile(idmap, lower_inode, file, mode);
+        return lower_inode->i_op->tmpfile(idmap, lower_inode, lower_file, mode);
     }
-    return -EOPNOTSUPP;
+    return -ENOSYS;
 }
 
 // get_acl()
 static struct posix_acl *proxyfs_get_acl(struct mnt_idmap *idmap,
                                          struct dentry *dentry,
-                                         int type) {
-    PROXYFS_DEBUG("name=%s, type=%d\n", dentry->d_name.name, type);
+                                         int type)
+{
+    PROXYFS_DEBUG("idmap=%p, dentry=%pd, type=%d\n",
+                  idmap,
+                  dentry,
+                  type);
+    struct dentry *lower_dentry = proxyfs_lower_dentry(dentry);
     struct inode *lower_inode = proxyfs_lower_inode(d_inode(dentry));
     if (lower_inode->i_op && lower_inode->i_op->get_acl) {
-        return lower_inode->i_op->get_acl(idmap, dentry, type);
+        return lower_inode->i_op->get_acl(idmap, lower_dentry, type);
     }
-    return ERR_PTR(-EOPNOTSUPP);
+    return ERR_PTR(-ENOSYS);
 }
 
 // set_acl()
 static int proxyfs_set_acl(struct mnt_idmap *idmap,
                            struct dentry *dentry,
                            struct posix_acl *acl,
-                           int type) {
-    PROXYFS_DEBUG("name=%s, type=%d\n", dentry->d_name.name, type);
+                           int type)
+{
+    PROXYFS_DEBUG("idmap=%p, dentry=%pd, acl=%p, type=%d\n",
+                  idmap,
+                  dentry,
+                  acl,
+                  type);
+    struct dentry *lower_dentry = proxyfs_lower_dentry(dentry);
     struct inode *lower_inode = proxyfs_lower_inode(d_inode(dentry));
     if (lower_inode->i_op && lower_inode->i_op->set_acl) {
-        return lower_inode->i_op->set_acl(idmap, dentry, acl, type);
+        return lower_inode->i_op->set_acl(idmap, lower_dentry, acl, type);
     }
-    return -EOPNOTSUPP;
+    return -ENOSYS;
 }
 
 // fileattr_set()
 static int proxyfs_fileattr_set(struct mnt_idmap *idmap,
                                 struct dentry *dentry,
-                                struct fileattr *fa) {
-    PROXYFS_DEBUG("name=%s\n", dentry->d_name.name);
+                                struct fileattr *fa)
+{
+    PROXYFS_DEBUG("idmap=%p, dentry=%pd, fa=%p\n",
+                  idmap,
+                  dentry,
+                  fa);
+    struct dentry *lower_dentry = proxyfs_lower_dentry(dentry);
     struct inode *lower_inode = proxyfs_lower_inode(d_inode(dentry));
     if (lower_inode->i_op && lower_inode->i_op->fileattr_set) {
-        return lower_inode->i_op->fileattr_set(idmap, dentry, fa);
+        return lower_inode->i_op->fileattr_set(idmap, lower_dentry, fa);
     }
-    return -EOPNOTSUPP;
+    return -ENOSYS;
 }
 
 // fileattr_get()
 static int proxyfs_fileattr_get(struct dentry *dentry,
-                                struct fileattr *fa) {
-    PROXYFS_DEBUG("name=%s\n", dentry->d_name.name);
+                                struct fileattr *fa)
+{
+    PROXYFS_DEBUG("dentry=%pd, fa=%p\n",
+                  dentry,
+                  fa);
+    struct dentry *lower_dentry = proxyfs_lower_dentry(dentry);
     struct inode *lower_inode = proxyfs_lower_inode(d_inode(dentry));
     if (lower_inode->i_op && lower_inode->i_op->fileattr_get) {
-        return lower_inode->i_op->fileattr_get(dentry, fa);
+        return lower_inode->i_op->fileattr_get(lower_dentry, fa);
     }
-    return -EOPNOTSUPP;
+    return -ENOSYS;
 }
 
 // get_offset_ctx()
-static struct offset_ctx *proxyfs_get_offset_ctx(struct inode *inode) {
-    PROXYFS_DEBUG("inode=%lu, get_offset_ctx\n", inode->i_ino);
+static struct offset_ctx *proxyfs_get_offset_ctx(struct inode *inode)
+{
+    PROXYFS_DEBUG("inode=" INODE_FMT "\n",
+                  INODE_ARG(inode));
     struct inode *lower_inode = proxyfs_lower_inode(inode);
     if (lower_inode->i_op && lower_inode->i_op->get_offset_ctx) {
         return lower_inode->i_op->get_offset_ctx(lower_inode);

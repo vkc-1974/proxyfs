@@ -16,6 +16,7 @@ proxyfs-objs := \
 	proxyfs-procfs.o
 
 ccflags-y += -g -Og
+#-Werror -pedantic-errors
 
 KDIR ?= /lib/modules/$(shell uname -r)/build
 PWD := $(shell pwd)

@@ -93,6 +93,164 @@ static void proxyfs_readahead(struct readahead_control *rac)
     }
 }
 
+// write_begin()
+static int proxyfs_write_begin(struct file *file,
+                               struct address_space *mapping,
+                               loff_t pos,
+                               unsigned len,
+                               struct folio **foliop,
+                               void **fsdata)
+{
+    struct file *lower_file = proxyfs_lower_file(file);
+    struct address_space *lower_mapping = lower_file->f_mapping;
+    if (lower_mapping->a_ops && lower_mapping->a_ops->write_begin) {
+        return lower_mapping->a_ops->write_begin(lower_file, lower_mapping, pos, len, foliop, fsdata);
+    }
+    return -ENOSYS;
+}
+
+// write_end()
+static int proxyfs_write_end(struct file *file,
+                             struct address_space *mapping,
+                             loff_t pos,
+                             unsigned len,
+                             unsigned copied,
+                             struct folio *folio,
+                             void *fsdata)
+{
+    struct file *lower_file = proxyfs_lower_file(file);
+    if (!lower_file) {
+        return -EIO;
+    }
+    struct address_space *lower_mapping = lower_file->f_mapping;
+    if (lower_mapping->a_ops && lower_mapping->a_ops->write_end) {
+        return lower_mapping->a_ops->write_end(lower_file, lower_mapping, pos, len, copied, folio, fsdata);
+    }
+    return -ENOSYS;
+}
+
+// bmap()
+static sector_t proxyfs_bmap(struct address_space *mapping,
+                             sector_t block)
+{
+    /*
+    struct address_space *lower_mapping = proxyfs_lower_mapping(mapping);
+    if (lower_mapping && lower_mapping->a_ops && lower_mapping->a_ops->bmap) {
+        return lower_mapping->a_ops->bmap(lower_mapping, block);
+    }
+    */
+    return 0;
+}
+
+// invalidate_folio()
+static void proxyfs_invalidate_folio(struct folio *,
+                                     size_t offset,
+                                     size_t len)
+{
+}
+
+// release_folio()
+static  bool proxyfs_release_folio(struct folio *,
+                                   gfp_t)
+{
+    bool ret = false;
+
+    return ret;
+}
+
+// free_folio()
+static void proxyfs_free_folio(struct folio *folio)
+{
+}
+
+// direct_IO()
+static ssize_t proxyfs_direct_IO(struct kiocb *iocb,
+                                 struct iov_iter *iter)
+{
+    if (iocb == NULL) {
+        return -EINVAL;
+    }
+    struct file *lower_file = proxyfs_lower_file(iocb->ki_filp);
+    if (lower_file &&
+        lower_file->f_mapping &&
+        lower_file->f_mapping->a_ops &&
+        lower_file->f_mapping->a_ops->direct_IO) {
+        struct kiocb lower_iocb = *iocb;
+        lower_iocb.ki_filp = lower_file;
+        return lower_file->f_mapping->a_ops->direct_IO(&lower_iocb, iter);
+    }
+    return -ENOSYS;
+}
+
+// migrate_folio()
+static int proxyfs_migrate_folio(struct address_space *,
+                                 struct folio *dst,
+                                 struct folio *src,
+                                 enum migrate_mode mode)
+{
+    int ret = -1;
+
+    return ret;
+}
+
+// launder_folio()
+static int proxyfs_launder_folio(struct folio *)
+{
+    int ret = -1;
+
+    return ret;
+}
+
+// is_partially_uptodate()
+static bool proxyfs_is_partially_uptodate(struct folio *,
+                                          size_t from,
+                                          size_t count)
+{
+    bool ret = false;
+
+    return ret;
+}
+
+// is_dirty_writeback()
+static void proxyfs_is_dirty_writeback(struct folio *,
+                                       bool *dirty,
+                                       bool *wb)
+{
+}
+
+// error_remove_folio()
+static int proxyfs_error_remove_folio(struct address_space *,
+                                      struct folio *)
+{
+    int ret = -1;
+
+    return ret;
+}
+
+// swap_activate()
+static int proxyfs_swap_activate(struct swap_info_struct *sis,
+                                 struct file *file,
+                                 sector_t *span)
+{
+    int ret = -1;
+
+    return ret;
+}
+
+// swap_deactivate()
+static void proxyfs_swap_deactivate(struct file *file)
+{
+}
+
+// swap_rw()
+static int proxyfs_swap_rw(struct kiocb *iocb,
+                           struct iov_iter *iter)
+{
+    int ret = -1;
+
+    return ret;
+}
+
 const struct address_space_operations proxyfs_mapping_ops = {
     // int (*writepage)(struct page *page, struct writeback_control *wbc);
     .writepage = proxyfs_writepage,
@@ -105,9 +263,9 @@ const struct address_space_operations proxyfs_mapping_ops = {
 	// void (*readahead)(struct readahead_control *);
     .readahead = proxyfs_readahead,
 	// int (*write_begin)(struct file *, struct address_space *mapping, loff_t pos, unsigned len, struct folio **foliop, void **fsdata);
-    .write_begin = NULL,
+    .write_begin = proxyfs_write_begin,
 	// int (*write_end)(struct file *, struct address_space *mapping, loff_t pos, unsigned len, unsigned copied, struct folio *folio, void *fsdata);
-    .write_end = NULL,
+    .write_end = proxyfs_write_end,
 	// sector_t (*bmap)(struct address_space *, sector_t);
     .bmap = NULL,
 	// void (*invalidate_folio) (struct folio *, size_t offset, size_t len);
@@ -117,7 +275,7 @@ const struct address_space_operations proxyfs_mapping_ops = {
 	// void (*free_folio)(struct folio *folio);
     .free_folio = NULL,
 	//ssize_t (*direct_IO)(struct kiocb *, struct iov_iter *iter);
-    .direct_IO = NULL,
+    .direct_IO = proxyfs_direct_IO,
 	// int (*migrate_folio)(struct address_space *, struct folio *dst, struct folio *src, enum migrate_mode);
     .migrate_folio = NULL,
 	// int (*launder_folio)(struct folio *);

@@ -170,4 +170,20 @@ int proxyfs_fill_super_block(struct super_block *sb,
                              void *data,
                              int silent);
 
+inline static void proxyfs_init_inode_ops(struct inode *inode)
+{
+    if (inode) {
+        inode->i_fop = &proxyfs_file_ops;
+        inode->i_op = &proxyfs_inode_ops;
+        inode->i_mapping->a_ops = &proxyfs_mapping_ops;
+    }
+}
+
+inline static void proxyfs_init_dentry_ops(struct dentry *dentry)
+{
+    if (dentry) {
+        dentry->d_op = &proxyfs_dentry_ops;
+    }
+}
+
 #endif //  !__PROXYFS_H__

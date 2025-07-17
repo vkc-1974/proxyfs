@@ -38,11 +38,9 @@ int proxyfs_fill_super_block(struct super_block *sb,
         return -ENOMEM;
     }
     inode->i_ino = lower_inode->i_ino;
-    inode->i_op = &proxyfs_inode_ops;
-    inode->i_fop = &proxyfs_file_ops;
     ((struct proxyfs_inode *)inode)->lower_inode = lower_inode;
     sb->s_root = d_make_root(inode);
-    sb->s_root->d_op = &proxyfs_dentry_ops;
+    proxyfs_init_dentry_ops(sb->s_root);
 
     return sb->s_root ? 0 : -ENOMEM;
 }

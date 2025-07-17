@@ -22,12 +22,61 @@ static struct dentry *proxyfs_lookup(struct inode *dir,
                                      struct dentry *dentry,
                                      unsigned int flags)
 {
-    PROXYFS_INODE_DEBUG(dentry, "lookup\n");
-    struct inode *lower_inode = proxyfs_lower_inode(dir);
-    if (lower_inode->i_op && lower_inode->i_op->lookup) {
-        return lower_inode->i_op->lookup(lower_inode, dentry, flags);
+    PROXYFS_INODE_DEBUG(dentry, "\n");
+
+    struct dentry *ret = NULL;
+    struct dentry *new_lower_dentry = NULL;
+
+    do {
+        if (dir == NULL || dentry == NULL) {
+            ret = ERR_PTR(-EINVAL);
+            break;
+        }
+
+        struct dentry *lower_parent = proxyfs_lower_dentry(dentry->d_parent);
+        struct dentry *lower_dentry = d_lookup(lower_parent, &dentry->d_name);
+
+        if (!lower_dentry) {
+            if ((lower_dentry = d_alloc(lower_parent, &dentry->d_name)) == NULL) {
+                ret = ERR_PTR(-ENOMEM);
+                break;
+            }
+            new_lower_dentry = lower_dentry;
+        }
+
+        struct inode *lower_dir = proxyfs_lower_inode(dir);
+        if (lower_dir->i_op && lower_dir->i_op->lookup) {
+            struct dentry *res = lower_dir->i_op->lookup(lower_dir, lower_dentry, flags);
+            if (IS_ERR(res)) {
+                ret = res;
+                break;
+            }
+        }
+
+        struct inode *lower_inode = lower_dentry->d_inode;
+        struct inode *inode = NULL;
+
+        if (lower_inode) {
+            inode = new_inode(dentry->d_sb);
+            // Fill proxyfs inode with the attributes from lower_inode
+            inode->i_ino = lower_inode->i_ino;
+            ((struct proxyfs_inode *)inode)->lower_inode = lower_inode;
+        }
+
+        d_add(dentry, inode);
+        proxyfs_init_dentry_ops(dentry);
+
+        ret = NULL;
+    } while (false);
+
+
+    if (IS_ERR(ret)) {
+        if (new_lower_dentry) {
+            dput(new_lower_dentry);
+        }
     }
-    return ERR_PTR(-ENOSYS);
+
+    return ret;
 }
 
 // get_link()

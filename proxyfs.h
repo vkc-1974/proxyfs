@@ -91,7 +91,8 @@ struct proxyfs_file_info {
 // Get file of underlying FS from proxyfs file
 inline static struct file *proxyfs_lower_file(const struct file *file)
 {
-    if (file) {
+    if (file != NULL &&
+        file->private_data != NULL) {
         return ((struct proxyfs_file_info *)file->private_data)->lower_file;
     }
     return NULL;
@@ -104,7 +105,8 @@ struct proxyfs_sb_info {
 // Get super block of underlying FS from proxyfs super block
 inline static struct super_block *proxyfs_lower_sb(const struct super_block *sb)
 {
-    if (sb != NULL) {
+    if (sb != NULL &&
+        sb->s_fs_info != NULL) {
         return ((struct proxyfs_sb_info *)sb->s_fs_info)->lower_sb;
     }
     return NULL;
@@ -117,7 +119,8 @@ struct proxyfs_dentry_info {
 
 inline static struct dentry *proxyfs_lower_dentry(struct dentry *dentry)
 {
-    if (dentry != NULL) {
+    if (dentry != NULL &&
+        dentry->d_fsdata != NULL) {
         return ((struct proxyfs_dentry_info *)dentry->d_fsdata)->lower_dentry;
     }
     return NULL;
@@ -125,8 +128,22 @@ inline static struct dentry *proxyfs_lower_dentry(struct dentry *dentry)
 
 inline static struct vfsmount *proxyfs_lower_mnt(struct dentry *dentry)
 {
-    if (dentry != NULL) {
+    if (dentry != NULL &&
+        dentry->d_fsdata != NULL) {
         return ((struct proxyfs_dentry_info *)dentry->d_fsdata)->lower_mnt;
+    }
+    return NULL;
+}
+
+struct proxyfs_folio_info {
+    struct folio *lower_folio;
+};
+
+inline static struct folio *proxyfs_lower_folio(struct folio *folio)
+{
+    if (folio != NULL &&
+        folio->private != NULL) {
+        return ((struct proxyfs_folio_info *)folio->private)->lower_folio;
     }
     return NULL;
 }

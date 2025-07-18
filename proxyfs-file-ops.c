@@ -159,7 +159,6 @@ static int proxyfs_mmap(struct file *file,
 static int proxyfs_open(struct inode *inode,
                         struct file *file)
 {
-    ///// struct inode *lower_inode = proxyfs_lower_inode(inode);
     struct file *lower_file;
 
     PROXYFS_DEBUG("inode=%lu, name=%s\n", inode->i_ino, file->f_path.dentry->d_name.name);
@@ -168,11 +167,21 @@ static int proxyfs_open(struct inode *inode,
     // TBD: inform user space running monitor application `open`
     //      routine has been called
 
+    //
+    // Invoke underlying FS to open a file and create underlying FS specific
+    // `struct file` instance
     lower_file = dentry_open(&file->f_path, file->f_flags, current_cred());
     if (IS_ERR(lower_file)) {
         return PTR_ERR(lower_file);
     }
 
+    //
+    // TBD: change proxyfs level `struct file` data instance (allocated by VFS
+    //      and passed to this routine)
+
+    //
+    // Set up proxyfs file's `private_data` with the reference to underlying
+    // FS level `struct file` data structure
     file->private_data = kmalloc(sizeof(struct proxyfs_file_info), GFP_KERNEL);
     if (!file->private_data) {
         fput(lower_file);

@@ -101,12 +101,73 @@ static int proxyfs_write_begin(struct file *file,
                                struct folio **foliop,
                                void **fsdata)
 {
+    pgoff_t index = pos >> PAGE_SHIFT;
+    struct folio *folio = NULL;
+    struct folio *lower_folio = NULL;
     struct file *lower_file = proxyfs_lower_file(file);
     struct address_space *lower_mapping = lower_file->f_mapping;
-    if (lower_mapping->a_ops && lower_mapping->a_ops->write_begin) {
-        return lower_mapping->a_ops->write_begin(lower_file, lower_mapping, pos, len, foliop, fsdata);
+    struct proxyfs_folio_info *info = NULL;
+    int ret = -ENOSYS;
+
+    do {
+        // 1. Invoke underlying FS (if available) to create its own folio object
+        if (lower_mapping->a_ops && lower_mapping->a_ops->write_begin) {
+            if ((ret = lower_mapping->a_ops->write_begin(lower_file,
+                                                         lower_mapping,
+                                                         pos,
+                                                         len,
+                                                         &lower_folio,
+                                                         fsdata)) != 0)  {
+                break;
+            }
+        } else {
+            ret = -ENOSYS;
+            break;
+        }
+
+        // 2. Get existing or create a new proxyfs level folio instance
+        folio = filemap_grab_folio(mapping, index);
+        if (IS_ERR(folio)) {
+            ret = PTR_ERR(folio);
+            break;
+        }
+
+        // 3. Bind lower FS folio wuth proxyfs folio via `private` data
+        if ((info = kmalloc(sizeof(*info), GFP_KERNEL)) == NULL) {
+            ret = -ENOMEM;
+            break;
+        }
+        info->lower_folio = lower_folio;
+        folio_attach_private(folio, info);
+
+        // 4. proxyfs is ready
+        *foliop = folio;
+        ret = 0;
+    } while (false);
+
+    if (ret == 0) {
+        return ret;
     }
-    return -ENOSYS;
+
+    if (folio != NULL) {
+        if (info != NULL) {
+            folio_detach_private(folio);
+        }
+
+        folio_put(folio);
+        folio = NULL;
+    }
+
+    if (lower_folio != NULL) {
+        //
+        // TBD: probably we need to call `folio_put(lower_folio)` if reference
+        //      count is increased (extra check is required)
+        if (lower_mapping->a_ops->release_folio) {
+            lower_mapping->a_ops->release_folio(lower_folio, GFP_KERNEL);
+        }
+        lower_folio = NULL;
+    }
+    return ret;
 }
 
 // write_end()
@@ -152,17 +213,25 @@ static void proxyfs_invalidate_folio(struct folio *,
 }
 
 // release_folio()
-static  bool proxyfs_release_folio(struct folio *,
-                                   gfp_t)
+static  bool proxyfs_release_folio(struct folio *folio,
+                                   gfp_t gfp)
 {
-    bool ret = false;
-
-    return ret;
+    struct proxyfs_folio_info *info = (struct proxyfs_folio_info *)folio->private;
+    if (info != NULL) {
+        kfree(info);
+        folio->private = NULL;
+    }
+    return true;
 }
 
 // free_folio()
 static void proxyfs_free_folio(struct folio *folio)
 {
+    struct proxyfs_folio_info *info = (struct proxyfs_folio_info *)folio->private;
+    if (info != NULL) {
+        kfree(info);
+        folio->private = NULL;
+    }
 }
 
 // direct_IO()

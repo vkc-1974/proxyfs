@@ -148,6 +148,19 @@ inline static struct folio *proxyfs_lower_folio(struct folio *folio)
     return NULL;
 }
 
+struct proxyfs_mapping_info {
+    struct address_space *lower_mapping;
+};
+
+inline static struct folio *proxyfs_lower_mapping(struct address_space *mapping)
+{
+    if (mapping != NULL &&
+        mapping->i_private_data != NULL) {
+        return ((struct proxyfs_folio_info *)mapping->i_private_data)->lower_folio;
+    }
+    return NULL;
+}
+
 //
 // Module context specific routines
 int proxyfs_context_set_client_pid(const int new_client_pid);

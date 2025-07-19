@@ -180,14 +180,24 @@ static int proxyfs_write_end(struct file *file,
                              void *fsdata)
 {
     struct file *lower_file = proxyfs_lower_file(file);
-    if (!lower_file) {
-        return -EIO;
-    }
     struct address_space *lower_mapping = lower_file->f_mapping;
-    if (lower_mapping->a_ops && lower_mapping->a_ops->write_end) {
-        return lower_mapping->a_ops->write_end(lower_file, lower_mapping, pos, len, copied, folio, fsdata);
+    struct folio *lower_folio = proxyfs_lower_folio(folio);
+
+    int ret = copied;
+
+    if (lower_mapping && lower_mapping->a_ops && lower_mapping->a_ops->write_end) {
+        ret = lower_mapping->a_ops->write_end(lower_file,
+                                              lower_mapping,
+                                              pos,
+                                              len,
+                                              copied,
+                                              lower_folio,
+                                              fsdata);
+    } else {
+        ret = -ENOSYS;
     }
-    return -ENOSYS;
+
+    return ret;
 }
 
 // bmap()

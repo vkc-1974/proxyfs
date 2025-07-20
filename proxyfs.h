@@ -45,6 +45,12 @@
 #define PROXYFS_DEBUG(fmt, ...) \
   pr_info("%s: %s: " fmt, MODULE_NAME, __func__, ##__VA_ARGS__)
 
+#define PROXYFS_WARNING(fmt, ...) \
+  pr_warning("%s: %s: " fmt, MODULE_NAME, __func__, ##__VA_ARGS__)
+
+#define PROXYFS_ERROR(fmt, ...) \
+  pr_err("%s: %s: " fmt, MODULE_NAME, __func__, ##__VA_ARGS__)
+
 static inline const char *proxyfs_dentry_name(const struct dentry *dentry) {
     return dentry ? (const char*)dentry->d_name.name : "?";
 }
@@ -152,11 +158,11 @@ struct proxyfs_mapping_info {
     struct address_space *lower_mapping;
 };
 
-inline static struct folio *proxyfs_lower_mapping(struct address_space *mapping)
+inline static struct address_space *proxyfs_lower_mapping(struct address_space *mapping)
 {
     if (mapping != NULL &&
         mapping->i_private_data != NULL) {
-        return ((struct proxyfs_folio_info *)mapping->i_private_data)->lower_folio;
+        return ((struct proxyfs_mapping_info *)mapping->i_private_data)->lower_mapping;
     }
     return NULL;
 }

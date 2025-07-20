@@ -29,7 +29,10 @@ int proxyfs_fill_super_block(struct super_block *sb,
     ((struct proxyfs_sb_info *)sb->s_fs_info)->lower_sb = lower_sb;
     sb->s_magic = PROXYFS_MAGIC;
     sb->s_op = &proxyfs_super_ops;
-
+    sb->s_flags = lower_sb->s_flags;
+    sb->s_maxbytes = lower_sb->s_maxbytes;
+    sb->s_blocksize = lower_sb->s_blocksize;
+    sb->s_blocksize_bits = lower_sb->s_blocksize_bits;
     // Create root inode
     lower_inode = lower_root.dentry->d_inode;
     // Note: `struct proxyfs_inode` is allocated by the call below
